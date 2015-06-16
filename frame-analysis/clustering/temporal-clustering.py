@@ -30,8 +30,35 @@ def load_labels():
     return labels
 
 
+'''
+method:
+    equal: does not consider ranking
+    weighted: consider ranking
+'''
+def merge_recogs_bog(window, method="equal"):
 
-def merge_recogs(window):
+    window_recog = {}
+     
+    #TODO: weighted based on ranking output
+    for idx, recog in enumerate(window):
+        for pred in recog['pred']['text']:
+            if pred not in window_recog:
+                window_recog[pred] = 1
+            else:
+                window_recog[pred] += 1
+
+      
+    # normalize
+    total_count = sum([window_recog[key] for key in window_recog])
+    for key in window_recog:
+        window_recog[key] /= (total_count * 1.0)
+
+    return window_recog
+
+'''
+My own term frequency invention
+'''
+def merge_recogs_top5softmax(window):
     
     window_recog = {'others': 0.0}
 
@@ -119,10 +146,10 @@ def getTimeDist(a_ts, b_ts, video_length):
     return (b_ts - a_ts)/(video_length * 1.0)
 
 
-def getNodeDist(a_node, b_node, video_length, w_tf = 0.3, w_ts = 0.8):
+def getNodeDist(a_node, b_node, video_length, w_tf = 0.5, w_ts = 0.5):
 
     dist = w_tf * (1 - getCosSimilarty(a_node[1], b_node[1])) + w_ts * getTimeDist(a_node[0], b_node[0], video_length)
-    #print (1 - getCosSimilarty(a_node[1], b_node[1])), getTimeDist(a_node[0], b_node[0], video_length), dist
+    print (1 - getCosSimilarty(a_node[1], b_node[1])), getTimeDist(a_node[0], b_node[0], video_length), dist
     
     return dist
     
@@ -157,7 +184,7 @@ if __name__ == "__main__":
         window += [recog]
         if len(window) == window_size:
 
-            node = (idx, merge_recogs(window))
+            node = (idx, merge_recogs_bog(window))
             window = []
             
             # compute similarity
@@ -172,7 +199,7 @@ if __name__ == "__main__":
     
     #plt.plot(index, sims)
     #plt.show() 
-     
+    print all_nodes 
     # off-line wards hierarchical clustering
     video_length = max([x[0] for x in all_nodes]) - min([x[0] for x in all_nodes])
     dist = [0.0 for x in range(len(all_nodes) * (len(all_nodes) - 1) / 2)]
