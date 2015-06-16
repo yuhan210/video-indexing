@@ -35,17 +35,29 @@ method:
     equal: does not consider ranking
     weighted: consider ranking
 '''
-def merge_recogs_bog(window, method="equal"):
+def merge_recogs_bog(window, method='weighted'):
 
     window_recog = {}
      
-    #TODO: weighted based on ranking output
     for idx, recog in enumerate(window):
-        for pred in recog['pred']['text']:
+        
+        for rank, pred in enumerate(recog['pred']['text']):
+            total_ranks = len(recog['pred']['text'])
+            
+            weight = 1
+
+            # determine the weight based on method
+            if method == 'equal':
+                weight = 1                      
+
+            elif method == 'weighted':
+                # inversed top 1 result gets 5 points
+                weight = total_ranks - rank
+
             if pred not in window_recog:
-                window_recog[pred] = 1
+                window_recog[pred] = weight
             else:
-                window_recog[pred] += 1
+                window_recog[pred] += weight
 
       
     # normalize
@@ -146,7 +158,7 @@ def getTimeDist(a_ts, b_ts, video_length):
     return (b_ts - a_ts)/(video_length * 1.0)
 
 
-def getNodeDist(a_node, b_node, video_length, w_tf = 0.5, w_ts = 0.5):
+def getNodeDist(a_node, b_node, video_length, w_tf = 0.4, w_ts = 0.6):
 
     dist = w_tf * (1 - getCosSimilarty(a_node[1], b_node[1])) + w_ts * getTimeDist(a_node[0], b_node[0], video_length)
     print (1 - getCosSimilarty(a_node[1], b_node[1])), getTimeDist(a_node[0], b_node[0], video_length), dist
@@ -213,7 +225,7 @@ if __name__ == "__main__":
     # clustering 
     linkage_matrix = linkage(dist, method='average')
    
-    ax = dendrogram(linkage_matrix, orientation="right");
+    ax = dendrogram(linkage_matrix, orientation='right');
     
     fc = fcluster(linkage_matrix, n_clusters, 'maxclust') 
    
