@@ -34,6 +34,7 @@ def load_labels():
 def merge_recogs(window):
     
     window_recog = {'others': 0.0}
+
     for idx, recog in enumerate(window):
         recog =  recog['pred'] 
 
@@ -58,7 +59,31 @@ def merge_recogs(window):
     '''
     return window_recog
 
-#def getClusterKeyword()
+
+def getClusterKeyword(cluster_index, all_nodes):
+
+    cluster_nodes = [all_nodes[idx] for idx in cluster_index]
+    cluster_size = len(cluster_nodes)    
+  
+    cluster_recog = {}  
+    # get averaged term frequency
+    for node in cluster_nodes:
+        node_tf = node[1] # a dict with term: conf
+        
+        for term in node_tf:
+            if term not in cluster_recog:
+                cluster_recog[term] = node_tf[term]
+            else:
+                cluster_recog[term] += node_tf[term]
+               
+    # normalization
+    for term in cluster_recog:
+        cluster_recog[term] /= cluster_size
+    
+    # sort based on the prob
+    cluster_recog = sorted(cluster_recog.items(), key=lambda x: x[1], reverse=True)
+    
+    return cluster_recog
 
 def getCosSimilarty(a_dict, b_dict):
     
@@ -68,6 +93,7 @@ def getCosSimilarty(a_dict, b_dict):
     sumab = 0.0
     sumaa = 0.0
     sumbb = 0.0
+
     for dim in space:
 
         a = 0.0
@@ -80,9 +106,9 @@ def getCosSimilarty(a_dict, b_dict):
         sumab += a * b
         sumaa += a * a
         sumbb += b * b        
-
     
     return sumab/(math.sqrt(sumaa * sumbb))
+
 
 def getTimeDist(a_ts, b_ts, video_length):
 
@@ -93,10 +119,10 @@ def getTimeDist(a_ts, b_ts, video_length):
     return (b_ts - a_ts)/(video_length * 1.0)
 
 
-def getNodeDist(a_node, b_node, video_length, w_tf = 0.3, w_ts = 0.7):
+def getNodeDist(a_node, b_node, video_length, w_tf = 0.3, w_ts = 0.8):
 
     dist = w_tf * (1 - getCosSimilarty(a_node[1], b_node[1])) + w_ts * getTimeDist(a_node[0], b_node[0], video_length)
-    print (1 - getCosSimilarty(a_node[1], b_node[1])), getTimeDist(a_node[0], b_node[0], video_length), dist
+    #print (1 - getCosSimilarty(a_node[1], b_node[1])), getTimeDist(a_node[0], b_node[0], video_length), dist
     
     return dist
     
@@ -111,14 +137,15 @@ if __name__ == "__main__":
     video_name = "beyonce__drunk_in_love__red_couch_session_by_dan_henig_a1puW6igXcg"
     #video_name = "google_glass_films_google_glass__real_estate_tour_throughglass_7e5iDdPGeGA"
     recog_folder = "/home/t-yuche/frame-analysis/recognition"
-    n_clusters = 3 
+    n_clusters = 2 
 
 
     recog_data = load_video_recog(recog_folder, video_name)
     recog_data = recog_data[0:200]
 
+
     # on-line hierarchical clustering
-    window_size = 5 # frames
+    window_size = 1 # frames
     window = []
     prev_node = (-1, {}) 
     all_nodes = []
@@ -138,10 +165,11 @@ if __name__ == "__main__":
                 sim = getCosSimilarty(prev_node[1], node[1]) 
                 sims += [sim]
                 index += [idx]
-            print node
+            #print node
             all_nodes += [node]
             prev_node = node
             #print prev_merged
+    
     #plt.plot(index, sims)
     #plt.show() 
      
@@ -175,9 +203,12 @@ if __name__ == "__main__":
         cluster_num += [node_to_cluster[idx]]
     
     # get the keywords for each cluster
-    #for cluster in cluster_to_node:
-    #    keyword = getClusterKeyword(cluster, all_nodes)      
- 
+    
+    for cluster_num, cluster in enumerate(cluster_to_node):
+        keywords = getClusterKeyword(cluster, all_nodes)
+        print '\nCluster %d' % (cluster_num)
+        for key in keywords:
+            print '%s : %f' % (key[0], key[1])
  
     '''  
     for chunk in cluster_to_node:
