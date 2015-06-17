@@ -4,8 +4,8 @@ import numpy as np
 import cv2
 
 # local modules
-from video import create_capture
-from common import clock, draw_str
+from utils.video import create_capture
+from utils.common import clock, draw_str
 
 
 def detect(img, cascade):
