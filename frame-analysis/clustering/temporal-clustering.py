@@ -1,6 +1,8 @@
-from tools.utils import load_video_recog
+from tools.utils import load_video_recog, load_video_caption
 from scipy.cluster.hierarchy import ward, dendrogram, linkage, fcluster
 from scipy.spatial.distance import squareform
+from nltk.stem.wordnet import WordNetLemmatizer
+import nltk
 
 
 import matplotlib
@@ -29,7 +31,6 @@ def load_labels():
     labels += ['others']
     return labels
 
-
 '''
 method:
     equal: does not consider ranking
@@ -51,7 +52,7 @@ def merge_recogs_bog(window, method='weighted'):
                 weight = 1                      
 
             elif method == 'weighted':
-                # inversed top 1 result gets 5 points
+                # inversed (top 1 result gets 5 points)
                 weight = total_ranks - rank
 
             if pred not in window_recog:
@@ -98,6 +99,58 @@ def merge_recogs_top5softmax(window):
     '''
     return window_recog
 
+
+'''
+Find all the verbs in a sentence 
+Input: string
+Return: a list of verbs (in its simple tense) appeared in the sentence 
+'''
+def getVerbFromStr(sentence):
+
+    segs = nltk.word_tokenize(sentence)
+    tags = nltk.pos_tag(segs)
+    
+    verbs = []
+    for word, tag in tags:
+        if tag == 'VB' or tag == 'VBZ' or tag == 'VBN' or tag == 'VBD' or tag == 'VBG':
+            simple_tence = str(WordNetLemmatizer().lemmatize(word, 'v'))
+            verbs += [simple_tence]
+
+    return verbs
+
+
+'''
+Input: A list of strings
+        method: 
+            equal - does not consider the rank of the caption
+            weighted - considers the rank (top 1 gets 5 points)
+Output: Verb term frquency (verb to count mapping) 
+''' 
+def getVerbTfFromCaps(captions, method = 'equal'):
+    #TODO: implement weighted version
+  
+    verb_tf = {}
+    for sentence in captions:
+
+        verbs = getVerbFromStr(sentence)
+        for verb in verbs:
+            if verb not in verb_tf:
+                verb_tf[verb] = 1
+            else:
+                verb_tf[verb] += 1        
+
+    return verb_tf 
+
+def getCaptionVerbBatch(caption_data):
+
+
+    for img_info in caption_data:
+        captions = img_info['candidate']['text']
+        verb_tf = getVerbTfFromCaps(captions)
+        img_info['candidate']['verbs'] = verb_tf 
+        #caps = caption['candidate']['text']
+
+    return caption_data
 
 def getClusterKeyword(cluster_index, all_nodes):
 
@@ -158,10 +211,10 @@ def getTimeDist(a_ts, b_ts, video_length):
     return (b_ts - a_ts)/(video_length * 1.0)
 
 
-def getNodeDist(a_node, b_node, video_length, w_tf = 0.4, w_ts = 0.6):
+def getNodeDist(a_node, b_node, video_length, w_tf = 0.3, w_ts = 0.7):
 
     dist = w_tf * (1 - getCosSimilarty(a_node[1], b_node[1])) + w_ts * getTimeDist(a_node[0], b_node[0], video_length)
-    print (1 - getCosSimilarty(a_node[1], b_node[1])), getTimeDist(a_node[0], b_node[0], video_length), dist
+    #print (1 - getCosSimilarty(a_node[1], b_node[1])), getTimeDist(a_node[0], b_node[0], video_length), dist
     
     return dist
     
@@ -173,18 +226,24 @@ if __name__ == "__main__":
     recog_folder = sys.argv[2]
     '''
     #video_name = "warty_pigs_through_google_glass_Xs3x3lCl8_E" 
+    #video_name = "yongpyong_resort_south_korea_snowboarding_with_google_glass__part_3_1LzvqaAu_Mk"
     video_name = "beyonce__drunk_in_love__red_couch_session_by_dan_henig_a1puW6igXcg"
     #video_name = "google_glass_films_google_glass__real_estate_tour_throughglass_7e5iDdPGeGA"
     recog_folder = "/home/t-yuche/frame-analysis/recognition"
+    caption_folder = "/home/t-yuche/frame-analysis/caption"
     n_clusters = 2 
 
 
-    recog_data = load_video_recog(recog_folder, video_name)
+    recog_data = load_video_recog(recog_folder, video_name) 
     recog_data = recog_data[0:200]
 
-
+    caption_data = load_video_caption(caption_folder, video_name)
+    caption_data = caption_data[0:200]
+    print getCaptionVerbBatch(caption_data)
+    
+    exit(-1)
     # on-line hierarchical clustering
-    window_size = 1 # frames
+    window_size = 5 # frames
     window = []
     prev_node = (-1, {}) 
     all_nodes = []
@@ -211,7 +270,10 @@ if __name__ == "__main__":
     
     #plt.plot(index, sims)
     #plt.show() 
-    print all_nodes 
+    '''
+    for node in all_nodes:
+        print node
+    '''
     # off-line wards hierarchical clustering
     video_length = max([x[0] for x in all_nodes]) - min([x[0] for x in all_nodes])
     dist = [0.0 for x in range(len(all_nodes) * (len(all_nodes) - 1) / 2)]
@@ -222,12 +284,13 @@ if __name__ == "__main__":
             idx += 1
 
     
-    # clustering 
+    # clustering
+    # average single complete
     linkage_matrix = linkage(dist, method='average')
    
     ax = dendrogram(linkage_matrix, orientation='right');
     
-    fc = fcluster(linkage_matrix, n_clusters, 'maxclust') 
+    fc = fcluster(linkage_matrix, n_clusters,'maxclust') 
    
     # assign nodes to clusters
     node_to_cluster = {}
@@ -242,10 +305,9 @@ if __name__ == "__main__":
         cluster_num += [node_to_cluster[idx]]
     
     # get the keywords for each cluster
-    
     for cluster_num, cluster in enumerate(cluster_to_node):
         keywords = getClusterKeyword(cluster, all_nodes)
-        print '\nCluster %d' % (cluster_num)
+        print '\nCluster %d' % (cluster_num + 1)
         for key in keywords:
             print '%s : %f' % (key[0], key[1])
  
@@ -253,10 +315,10 @@ if __name__ == "__main__":
     for chunk in cluster_to_node:
         print sorted(chunk)
 
+    '''
     for chunk in cluster_to_node:
         print min(chunk), max(chunk)
 
-    '''
     cluster_num = []
     for idx in xrange(len(all_nodes)):
         cluster_num += [node_to_cluster[idx]]
@@ -266,7 +328,9 @@ if __name__ == "__main__":
     plt.xticks(range(len(all_nodes)), [x[0] for x in all_nodes], rotation = 'vertical')
     plt.xlabel('Frame Number')
     plt.ylabel('Cluster Number')
+    plt.ylim([-1, n_clusters+1])
     plt.show()
+
     '''
     fig, ax = plt.subplots(figsize=(15, 20)) # set size
 
