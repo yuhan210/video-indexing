@@ -56,7 +56,11 @@ if __name__ == '__main__':
                     else:
                         found_filtered.append(r)
             ''' 
-            img_blob['peds'] = found
+            people = []
+            for x, y, w, h in found:
+                 people += [ [int(x), int(y), int(w), int(h)] ]
+
+            img_blob['peds'] = people
             img_blob['pd_time'] = toc - tic
             blob['img_blobs'] += [img_blob]
 
