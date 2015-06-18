@@ -33,6 +33,10 @@ if __name__ == '__main__':
 
     for v in os.listdir(video_folder):
         print v        
+        
+        json_filename = v + '_openfd.json'
+        if os.path.exists(json_filename):
+            continue
 
         blob = {}
         blob['video_name'] = v
@@ -61,5 +65,5 @@ if __name__ == '__main__':
             img_blob['fd_time'] = (toc-tic)
             blob['img_blobs'] += [img_blob]
 
-    json_filename = v + '_openfd.json'
-    json.dump(blob, open(os.path.join('/home/t-yuche/frame-analysis/face-info/', json_filename), 'w'))
+        json_filename = v + '_openfd.json'
+        json.dump(blob, open(os.path.join('/home/t-yuche/frame-analysis/face-info/', json_filename), 'w'))
