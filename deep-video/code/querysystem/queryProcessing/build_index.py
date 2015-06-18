@@ -18,7 +18,7 @@ def load_video_summary(summary_folder, video_name):
     file_pref = os.path.join(summary_folder, video_name)
 
     # load caption
-    with open(file_pref + '_caption.json') as json_file:
+    with open(file_pref + '_5_caption.json') as json_file:
         caption_data = json.load(json_file)
     
     # sort caption results based on frame number

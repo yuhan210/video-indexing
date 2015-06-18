@@ -1,5 +1,5 @@
 from queryProcessing.build_index import build_strmatch, build_tfidf
-from utility.utility import play_video
+from utils.video import play_video
 
 import sys
 import cv2
@@ -32,6 +32,6 @@ if __name__ == "__main__":
                 print 'Not found'
             else:
                 print video_name, score
-            #play_video()
+                play_video('/home/t-yuche/deep-video/data/videos/' + video_name + '.mp4', 5)
             #process_query()
     
