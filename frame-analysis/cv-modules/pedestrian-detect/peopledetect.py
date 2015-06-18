@@ -4,6 +4,7 @@ import numpy as np
 import cv2
 import os
 import time
+import json
 
 def inside(r, q):
     rx, ry, rw, rh = r
@@ -59,3 +60,5 @@ if __name__ == '__main__':
             img_blob['pd_time'] = toc - tic
             blob['img_blobs'] += [img_blob]
 
+        json_filename = v + '_openpd.json'
+        json.dump(blob, open(os.path.join('/home/t-yuche/frame-analysis/ped-info/', json_filename), 'w'))
