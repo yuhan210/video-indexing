@@ -31,6 +31,30 @@ def load_labels():
     labels += ['others']
     return labels
 
+
+def merge_verb_bog(window):
+
+    window_verbtf = {}
+    total_score = 0
+    for caption in window:
+        v_tf = caption['candidate']['verbs']
+        print v_tf
+        for v in v_tf:
+            if v not in window_verbtf:
+                window_verbtf[v] = v_tf[v]
+            else:
+                window_verbtf[v] += v_tf[v]
+
+            total_score += v_tf[v]
+
+    
+    # normalize
+    for v in window_verbtf:
+        window_verbtf[v] /= (total_score * 1.0)
+
+    print window_verbtf
+    return window_verbtf
+
 '''
 method:
     equal: does not consider ranking
@@ -113,8 +137,11 @@ def getVerbFromStr(sentence):
     verbs = []
     for word, tag in tags:
         if tag == 'VB' or tag == 'VBZ' or tag == 'VBN' or tag == 'VBD' or tag == 'VBG':
-            simple_tence = str(WordNetLemmatizer().lemmatize(word, 'v'))
-            verbs += [simple_tence]
+            verb_simple_tence = str(WordNetLemmatizer().lemmatize(word, 'v'))
+            
+            ## This is a hack. Remove 'be' verb  
+            if verb_simple_tence != 'be': 
+                verbs += [verb_simple_tence]
 
     return verbs
 
@@ -147,8 +174,9 @@ def getCaptionVerbBatch(caption_data):
     for img_info in caption_data:
         captions = img_info['candidate']['text']
         verb_tf = getVerbTfFromCaps(captions)
+        
+        ## put the results back 
         img_info['candidate']['verbs'] = verb_tf 
-        #caps = caption['candidate']['text']
 
     return caption_data
 
@@ -158,24 +186,35 @@ def getClusterKeyword(cluster_index, all_nodes):
     cluster_size = len(cluster_nodes)    
   
     cluster_recog = {}  
+    cluster_verb = {}
     # get averaged term frequency
     for node in cluster_nodes:
         node_tf = node[1] # a dict with term: conf
-        
+        node_vtf = node[2]
+
         for term in node_tf:
             if term not in cluster_recog:
                 cluster_recog[term] = node_tf[term]
             else:
                 cluster_recog[term] += node_tf[term]
-               
+        
+        for verb in node_vtf:
+            if verb not in cluster_verb:
+                cluster_verb[verb] = node_vtf[verb]
+            else:
+                cluster_verb[verb] += node_vtf[verb]
+ 
     # normalization
     for term in cluster_recog:
-        cluster_recog[term] /= cluster_size
-    
+        cluster_recog[term] /= (cluster_size * 1.0)
+    for verb in cluster_verb:
+        cluster_verb[verb] /= (cluster_size * 1.0)
+ 
     # sort based on the prob
     cluster_recog = sorted(cluster_recog.items(), key=lambda x: x[1], reverse=True)
+    cluster_verb = sorted(cluster_verb.items(), key=lambda x: x[1], reverse=True)
     
-    return cluster_recog
+    return cluster_recog, cluster_verb
 
 def getCosSimilarty(a_dict, b_dict):
     
@@ -211,9 +250,11 @@ def getTimeDist(a_ts, b_ts, video_length):
     return (b_ts - a_ts)/(video_length * 1.0)
 
 
-def getNodeDist(a_node, b_node, video_length, w_tf = 0.3, w_ts = 0.7):
+def getNodeDist(a_node, b_node, video_length, w_rtf = 0.3, w_vtf = 0.2, w_ts = 0.5):
 
-    dist = w_tf * (1 - getCosSimilarty(a_node[1], b_node[1])) + w_ts * getTimeDist(a_node[0], b_node[0], video_length)
+    dist = w_rtf * (1 - getCosSimilarty(a_node[1], b_node[1])) + \
+           w_vtf * (1 - getCosSimilarty(a_node[2], b_node[2])) + \
+           w_ts * getTimeDist(a_node[0], b_node[0], video_length)
     #print (1 - getCosSimilarty(a_node[1], b_node[1])), getTimeDist(a_node[0], b_node[0], video_length), dist
     
     return dist
@@ -231,17 +272,16 @@ if __name__ == "__main__":
     #video_name = "google_glass_films_google_glass__real_estate_tour_throughglass_7e5iDdPGeGA"
     recog_folder = "/home/t-yuche/frame-analysis/recognition"
     caption_folder = "/home/t-yuche/frame-analysis/caption"
-    n_clusters = 2 
+    n_clusters = 3
 
 
     recog_data = load_video_recog(recog_folder, video_name) 
-    recog_data = recog_data[0:200]
+    #recog_data = recog_data[0:200]
 
     caption_data = load_video_caption(caption_folder, video_name)
-    caption_data = caption_data[0:200]
-    print getCaptionVerbBatch(caption_data)
+    #caption_data = caption_data[0:200]
+    caption_data = getCaptionVerbBatch(caption_data)
     
-    exit(-1)
     # on-line hierarchical clustering
     window_size = 5 # frames
     window = []
@@ -251,23 +291,24 @@ if __name__ == "__main__":
     sims = []
     index = []
     for idx, recog in enumerate(recog_data):
+        caption = caption_data[idx]
         # print recog['conf'], recog['text'] 
-        window += [recog]
+        window += [(recog, caption)]
         if len(window) == window_size:
-
-            node = (idx, merge_recogs_bog(window))
+             
+            node = (idx, merge_recogs_bog([x[0] for x in window]), merge_verb_bog([x[1] for x in window]))
             window = []
-            
+            print node 
             # compute similarity
             if prev_node[0] != -1:
-                sim = getCosSimilarty(prev_node[1], node[1]) 
+                sim = 0.5 * getCosSimilarty(prev_node[1], node[1]) + 0.5 * getCosSimilarty(prev_node[2], node[2]) 
                 sims += [sim]
                 index += [idx]
             #print node
             all_nodes += [node]
             prev_node = node
             #print prev_merged
-    
+     
     #plt.plot(index, sims)
     #plt.show() 
     '''
@@ -306,11 +347,14 @@ if __name__ == "__main__":
     
     # get the keywords for each cluster
     for cluster_num, cluster in enumerate(cluster_to_node):
-        keywords = getClusterKeyword(cluster, all_nodes)
+        keywords, keyverbs = getClusterKeyword(cluster, all_nodes)
         print '\nCluster %d' % (cluster_num + 1)
         for key in keywords:
             print '%s : %f' % (key[0], key[1])
- 
+
+        print ''
+        for verb in keyverbs:
+            print '%s : %f' % (verb[0], verb[1])
     '''  
     for chunk in cluster_to_node:
         print sorted(chunk)
