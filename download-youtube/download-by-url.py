@@ -75,10 +75,8 @@ def getNewVideoName(video):
 
     return new_videoname
 
-def downloadVideo(url, video_folder="/home/t-yuche/deep-video/data/videos", video_meta_folder="/home/t-yuche/deep-video/data/video-info"):
+def downloadVideo(video, video_folder="/home/t-yuche/deep-video/data/videos", video_meta_folder="/home/t-yuche/deep-video/data/video-info"):
     
-    video = pafy.new(url)   
-
     new_filename = getNewVideoName(video)  
     
     best_video = video.getbest(preftype="mp4")
@@ -98,6 +96,6 @@ if __name__ == "__main__":
     #https://www.youtube.com/results?search_query=basketball        
     #watch_urls = getWatchUrls(query)
     
-    # get top-10 urls
-    downloadVideo(url) 
+    video = pafy.new(url)   
+    downloadVideo(video) 
             
