@@ -35,7 +35,7 @@ if __name__ == '__main__':
         print v        
         
         json_filename = v + '_openfd.json'
-        if os.path.exists(json_filename):
+        if os.path.exists(os.path.join('/home/t-yuche/frame-analysis/face-info/', json_filename)):
             continue
 
         blob = {}
@@ -59,11 +59,12 @@ if __name__ == '__main__':
             toc = time.time()
             faces = []
             for x1, y1, x2, y2 in rects:
-                faces += [([x1, y1, x2-x1, y2-y1])]
+                faces += [([int(x1), int(y1), int(x2-x1), int(y2-y1)])]
             
+            #print faces    
             img_blob['faces'] = faces
             img_blob['fd_time'] = (toc-tic)
             blob['img_blobs'] += [img_blob]
-
+        
         json_filename = v + '_openfd.json'
         json.dump(blob, open(os.path.join('/home/t-yuche/frame-analysis/face-info/', json_filename), 'w'))
