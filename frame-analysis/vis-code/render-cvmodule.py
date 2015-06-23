@@ -45,7 +45,8 @@ if __name__ == "__main__":
         # draw_rects(img, ped['peds'], (0, 255, 0))
         # draw ocr
         ocr_str = unidecode(ocr['ocr'])
-        cv2.putText(img, ocr_str, (30, h-30), cv2.FONT_HERSHEY_SIMPLEX, 1, 2, 255)
+        print ocr_str
+        #cv2.putText(img, ocr_str, (30, h-30), cv2.FONT_HERSHEY_SIMPLEX, 1, 2, 255)
        
         # draw caption verbs
         verbs = getVerbTfFromCaps(caption['candidate']['text'])
@@ -64,9 +65,9 @@ if __name__ == "__main__":
         for idx, s in enumerate(rcnn['pred']['text']):
             render_str = '%s:%.4f' %(s, rcnn['pred']['conf'][idx]) 
             cv2.putText(img, render_str, (30, 30 + 30 * idx), cv2.FONT_HERSHEY_SIMPLEX, 1, 255)
- 
+
         cv2.namedWindow(img_name)
         cv2.moveWindow(img_name, 30, 30)
         cv2.imshow(img_name, img)
-        cv2.waitKey(1000)
+        cv2.waitKey(500)
         cv2.destroyWindow(img_name)
