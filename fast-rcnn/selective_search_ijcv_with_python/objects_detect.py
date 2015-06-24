@@ -12,7 +12,7 @@ import argparse
 import json
 import os
 
-import tempfile
+import time
 import shlex
 import subprocess
 import scipy.io
@@ -34,7 +34,7 @@ NETS = {'vgg16': ('VGG16',
 
 script_dirname = os.path.abspath(os.path.dirname(__file__))
 
-def get_windows(image_fnames, cmd='selective_search'):
+def get_windows(image_fnames, output_files, cmd='selective_search_rcnn'):
     """
     Run MATLAB Selective Search code on the given image filenames to
     generate window proposals.
@@ -48,19 +48,19 @@ def get_windows(image_fnames, cmd='selective_search'):
             - 'selective_search' for a few quick proposals
             - 'selective_seach_rcnn' for R-CNN configuration for more coverage.
     """
-    # Form the MATLAB script command that processes images and write to
-    # temporary results file.
-    f, output_filename = tempfile.mkstemp(suffix='.mat')
-    os.close(f)
+
+    # Form the MATLAB script command that processes images and write to results file.
     fnames_cell = '{' + ','.join("'{}'".format(x) for x in image_fnames) + '}'
     command = "{}({}, '{}')".format(cmd, fnames_cell, output_filename)
-    print(command)
+    #print(command)
 
     # Execute command in MATLAB.
     mc = "matlab -nojvm -r \"try; {}; catch; exit; end; exit\"".format(command)
+    tic = time.time()
     pid = subprocess.Popen(
         shlex.split(mc), stdout=open('/dev/null', 'w'), cwd=script_dirname)
     retcode = pid.wait()
+    toc = time.time()
     if retcode != 0:
         raise Exception("Matlab script did not exit successfully!")
 
@@ -69,41 +69,66 @@ def get_windows(image_fnames, cmd='selective_search'):
     subtractor = np.array((1, 1, 0, 0))[np.newaxis, :]
     all_boxes = [boxes - subtractor for boxes in all_boxes]
 
-    # Remove temporary file, and return.
-    os.remove(output_filename)
     if len(all_boxes) != len(image_fnames):
         raise Exception("Something went wrong computing the windows!")
-    return all_boxes
+    
+    return (toc-tic), all_boxes
 
-if __name__ == '__main__':
 
-def Detect(net, image_path):
+def Detect(net, image_path, object_proposals):
     
     """Detect object classes in an image assuming the whole image is an object."""
     # Load the image
     im = cv2.imread(image_path)
     h, w, c = im.shape
-    
-    # TODO: Run selective search first
-    object_props = get_windows(image_path)
 
     # Detect all object classes and regress object bounds
-    timer = Timer()
-    timer.tic()
-    scores, boxes = im_detect(net, im, np.array([[0, 0, w, h]]))
-    scores = scores[0]
-    timer.toc()
- 
-    # get top 6 prediction
-    pred_classes = [CLASSES[idx] for idx in ((-scores).argsort()[:6]).tolist()]
-    conf = [ (-1) * prob for prob in np.sort(-scores)[:6].tolist()]
-    
+    tic = time.time()
+    scores, boxes = im_detect(net, im, object_proposals)
+    toc = time.time()
+    detect_time = (toc-tic)
+    # Visualize detections for each class
+    '''
+    CONF_THRESH = 0.8
+    NMS_THRESH = 0.3
+    for cls in classes:
+        cls_ind = CLASSES.index(cls)
+        cls_boxes = boxes[:, 4*cls_ind:4*(cls_ind + 1)]
+        cls_scores = scores[:, cls_ind]
+        dets = np.hstack((cls_boxes,
+                          cls_scores[:, np.newaxis])).astype(np.float32)
+        keep = nms(dets, NMS_THRESH)
+        dets = dets[keep, :]
+        print 'All {} detections with p({} | box) >= {:.1f}'.format(cls, cls,
+                                                                    CONF_THRESH)
+        vis_detections(im, cls, dets, thresh=CONF_THRESH)
+    '''
+    # need to process each proposal
     img_blob = {}
-    img_blob['image_path'] = image_path
-    img_blob['pred'] = {'text': pred_classes, 'conf': conf}
-    img_blob['rcnn_time'] = timer.total_time
+    img_blob['img_path'] = image_path
+    img_blob['detections'] = []
+  
+    # sort for each row
+    sort_idxs = np.argsort(-scores, axis = 1).tolist()
 
-    return img_blob
+    # for each proposal
+    for idx, idx_rank in enumerate(sort_idxs):
+        
+        # get top-6
+        t_boxes = []
+        preds = []
+        confs = [] 
+        idx_rank = idx_rank[:6] # a list
+        # for top-6 class
+        for cls_ind in idx_rank:
+            t_boxes += [ boxes[idx, 4*cls_ind:4*(cls_ind+1)].tolist() ]
+            preds += [ CLASSES[cls_ind] ]
+            confs += [ scores[idx, cls_ind] ] 
+   
+        img_blob['detections']  += [[t_boxes, preds, confs]]
+    
+
+    return detect_time, img_blob
 
 def parse_args():
 
@@ -124,6 +149,9 @@ def parse_args():
     return args
 
 if __name__ == '__main__':
+
+    ## output
+    ## proposals.json, rcnn_output.json (blob), selective_search_time.json (bbox_time), digesting_proposals.json (detect_time)
     args = parse_args()
 
     prototxt = os.path.join(cfg.ROOT_DIR, 'models', NETS[args.demo_net][0],
@@ -141,23 +169,74 @@ if __name__ == '__main__':
         caffe.set_mode_gpu()
 
     video_folder = args.video_folder    
-    
     net = caffe.Net(prototxt, caffemodel, caffe.TEST)
-    
+
+    batch_size = 30
+
+    # for each video
     for v in os.listdir(video_folder):
-        print v 
+        print v
         blob = {}
-        blob['imgblobs'] = []
-       
+        blob['img_blobs'] = []
+        
+        regions = {}
+        regions['img_blobs'] = []
+
+        bbox_time_log = []
+
+        detect_time_log = {}
+        detect_time_log['img_blobs'] = []
+        
         frame_folder = os.path.join(video_folder, v)
-        
-        for f in os.listdir(frame_folder):
-            frame_path = os.path.join(frame_folder, f) 
-        
-            img_blob = Detect(net, frame_path) 
+        image_filenames = [os.path.join(frame_folder, f) for f in os.listdir(frame_folder)]
+        image_filenames = sorted(image_filenames, key=lambda x: int(x.split('/')[-1].split('.')[0]))  
 
-            blob['imgblobs'] += [img_blob]
+        batch_count = 0 
+        for i in range(0, len(image_filenames), batch_size):
+            batch_range = range(i, min(i+batch_size, len(image_filenames)))
+            batch_filenames = [image_filenames[j] for j in batch_range]
+            
+            output_filename = '/tmp/' + v + '_batch_' + str(batch_count) + '.mat'         
+            
+            # return a list of arrays 
+            selective_search_time, all_boxes = get_windows(batch_filenames, output_filename)
+            
+            ## bbox generation time
+            bbox_time_log += [{'time':selective_search_time , 'n_frames': len(batch_filenames)}]
+        
+            # cannot do in batches, iterate through all the images
+            # for each image
+            for idx, img_name in enumerate(batch_filenames):
+                proposals = all_boxes[idx]
+                detect_time, img_blob = Detect(net, img_name, proposals)
+                blob['img_blobs'] += [img_blob]
 
-        json_filename = v + '_multi_rcnnrecog.json'
-        json.dump(blob, open(os.path.join('/home/t-yuche/frame-analysis/rcnn-info/', json_filename), 'w'))
+                region = {}
+                region['img_path'] = img_name
+                region['proposals'] = proposals.tolist()
+                regions['img_blobs'] += [region]
+                    
+                detect_log = {}
+                detect_log['img_name'] = img_name
+                detect_log['detect_time'] = detect_time
+                detect_time_log['img_blobs'] += [detect_log]
+                
+            batch_count += 1
+  
+      
+        result_folder = '/home/t-yuche/frame-analysis/rcnn-mulreg-info'
+        # write execution time
+        proposal_t_json_filename = v + '_proposal_time.json'
+        detect_t_json_filename = v + '_detect_time.json'
+        
+        json.dump(bbox_time_log, open(os.path.join(result_folder, proposal_t_json_filename), 'w'))
+        json.dump(detect_time_log, open(os.path.join(result_folder, detect_t_json_filename), 'w'))
+
+        # write proposals
+        region_json_filename = v + '_proposals.json' 
+        json.dump(regions, open(os.path.join(result_folder, region_json_filename), 'w'))
+
+        # write recognition results into json file 
+        detect_json_filename = v + '_detections.json'
+        json.dump(blob, open(os.path.join(result_folder, detect_json_filename), 'w'))
 
