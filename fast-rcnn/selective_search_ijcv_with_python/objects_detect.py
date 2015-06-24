@@ -107,7 +107,7 @@ def Detect(net, image_path, object_proposals):
     img_blob = {}
     img_blob['img_path'] = image_path
     img_blob['detections'] = []
-  
+    img_blob['detect_time'] = detect_time 
     # sort for each row
     sort_idxs = np.argsort(-scores, axis = 1).tolist()
 
@@ -123,7 +123,7 @@ def Detect(net, image_path, object_proposals):
         for cls_ind in idx_rank:
             t_boxes += [ boxes[idx, 4*cls_ind:4*(cls_ind+1)].tolist() ]
             preds += [ CLASSES[cls_ind] ]
-            confs += [ scores[idx, cls_ind] ] 
+            confs += [ scores[idx, cls_ind].tolist() ] 
    
         img_blob['detections']  += [[t_boxes, preds, confs]]
     
@@ -209,29 +209,22 @@ if __name__ == '__main__':
             for idx, img_name in enumerate(batch_filenames):
                 proposals = all_boxes[idx]
                 detect_time, img_blob = Detect(net, img_name, proposals)
+                img_blob['ave_search_time'] = selective_search_time / (len(batch_filenames) * 1.0)
                 blob['img_blobs'] += [img_blob]
 
                 region = {}
                 region['img_path'] = img_name
                 region['proposals'] = proposals.tolist()
                 regions['img_blobs'] += [region]
-                    
-                detect_log = {}
-                detect_log['img_name'] = img_name
-                detect_log['detect_time'] = detect_time
-                detect_time_log['img_blobs'] += [detect_log]
                 
             batch_count += 1
-  
-      
+            break 
+        
         result_folder = '/home/t-yuche/frame-analysis/rcnn-mulreg-info'
         # write execution time
         proposal_t_json_filename = v + '_proposal_time.json'
-        detect_t_json_filename = v + '_detect_time.json'
         
         json.dump(bbox_time_log, open(os.path.join(result_folder, proposal_t_json_filename), 'w'))
-        json.dump(detect_time_log, open(os.path.join(result_folder, detect_t_json_filename), 'w'))
-
         # write proposals
         region_json_filename = v + '_proposals.json' 
         json.dump(regions, open(os.path.join(result_folder, region_json_filename), 'w'))
@@ -239,4 +232,4 @@ if __name__ == '__main__':
         # write recognition results into json file 
         detect_json_filename = v + '_detections.json'
         json.dump(blob, open(os.path.join(result_folder, detect_json_filename), 'w'))
-
+        break
