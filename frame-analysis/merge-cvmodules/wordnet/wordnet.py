@@ -1,4 +1,5 @@
 from nltk.corpus import wordnet
+from xml.dom import minidom
 
 import pandas as pd
 import sys
@@ -49,6 +50,7 @@ def getHypernyms(words):
     
     
     return best_words
+
 def preprocessSynsetWords(file_name):
     
     with open(file_name) as f:
@@ -83,12 +85,53 @@ def preprocessSynsetWords(file_name):
     #print label_match
 
 
+def getTree(wnid, isa_tuple, words_dict):
+    layer = 0
+    word_tree = [] 
+ 
     
+    while(True):
 
+        layer += 1
+        if wnid not in isa_tuple:
+            break 
+  
+        p_wnid = isa_tuple[wnid]
+        p_names = words_dict[p_wnid]
+        word_tree.append((layer, p_wnid, p_names)) 
+        wnid = p_wnid
+
+    return word_tree
 
 if __name__ == "__main__":
     
     synset_file = "/home/t-yuche/caffe/data/ilsvrc12/synset_words.txt"
+    ##
+    words_file = 'words.txt'
+    isa_file = 'wordnet.is_a.txt'
     
-    preprocessSynsetWords(synset_file)
+    ##
+    isa_tuple = {}
+    with open(isa_file) as f:
+        for l in f.readlines():
+            segs = l.strip().split(' ')
+            isa_tuple[segs[1]] = segs[0]
+    ##   
+    words_dict = {} 
+    with open(words_file) as f:
+        for l in f.readlines():
+            segs = l.strip().split('\t')
+            wnid = segs[0]
+            names = segs[1]
+            words_dict[wnid] = names
+   
+    word_tree = {} 
+    with open(synset_file) as f:
+       for l in f.readlines():
+            wnid = l.strip().split(' ')[0]
+            names = [x.strip() for x in ' '.join(l.strip().split(' ')[1:]).split(',')]
+            word_tree[wnid] = [getTree(wnid, isa_tuple, words_dict)]
+     
+    #preprocessSynsetWords(synset_file)
     # dump in json
+    json.dump(word_tree, open('synset_word_tree', 'w'))
