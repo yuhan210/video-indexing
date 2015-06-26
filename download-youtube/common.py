@@ -50,5 +50,4 @@ def createVideoMeatadata(video_obj, new_filename):
 
     return v
 
-if __name__ == "__main__":
 
