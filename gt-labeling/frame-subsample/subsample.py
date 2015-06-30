@@ -1,6 +1,8 @@
 from tools.utils import *
 
+
 import numpy as np
+import copy
 import sys
 import json
 import cv2
@@ -33,6 +35,37 @@ def getSobel(img, k_size = 3):
     #dst = cv2.add(abs_grad_x,abs_grad_y)
     return dst
 
+def uniformSampling(blob, total_frame, sampling_freq = 30): # sampling_freq in fps
+
+    upsample_blob = {}
+    upsample_blob['img_blobs'] = []
+
+    for idx, kf in enumerate(blob['img_blobs']): # for each pair
+        if idx == (len(blob['img_blobs']) - 1): # the last one
+            # last 
+            cur = int(kf['key_frame'].split('.')[0])
+            nxt = total_frame-1 
+
+        else:
+            cur = int(kf['key_frame'].split('.')[0])
+            nxt = int(blob['img_blobs'][idx + 1]['key_frame'].split('.')[0])
+    
+        print cur, nxt    
+        # upsample
+        counter = 0
+        add_frame = cur + sampling_freq * counter
+        while ( add_frame < nxt ):
+            print add_frame, nxt
+            # add frame
+            img_blob = {}
+            img_blob['key_frame'] = str(add_frame) + '.jpg'
+            upsample_blob['img_blobs'] += [img_blob]
+            counter += 1 
+            add_frame = cur + sampling_freq * counter
+        
+         
+    return upsample_blob
+
 def getFrameDiff(prev_frame, cur_frame):
     
     frameDelta = cv2.absdiff(prev_frame, cur_frame)
@@ -45,9 +78,10 @@ def getFrameDiff(prev_frame, cur_frame):
 if __name__ == "__main__":
 
     video_path = sys.argv[1]
-    MOVETHRESH = 0.3  # ratio of the w * h
+    MOVETHRESH = 0.5  # ratio of the w * h
     state = 0 # state 0: waiting for frames/ state 1: waiting for clear frames 
 
+    total_frame = len(os.listdir(video_path)) 
     blob = {}
     blob['img_blobs'] = []
        
@@ -77,14 +111,8 @@ if __name__ == "__main__":
         #cv2.putText(thresh,str(movement) , (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 2, (255,255,255), 2)
         #cv2.imshow('frameDelta', thresh)
         
-        
         # test if it's key frame
         if state == 0 and movement > (MOVETHRESH * gray.shape[0] * gray.shape[1]):
-            state = 1 
-          
-        elif state == 1 and np.mean(getSobel(img)) > 7:
-            
-            #print 'frame:', f
             prevFrame = gray
             state = 0 
             img_blob = {}
@@ -96,10 +124,12 @@ if __name__ == "__main__":
             if k == 27:
                 break
             '''
-    #cv2.destroyAllWindows()
+    print blob
+    print 'start upsampling'
+    # uniform sampling
+    blob = uniformSampling(blob, total_frame)   
     
-        
     print 'subsample rate:', len(blob['img_blobs'])/(len(os.listdir(video_path)) * 1.0), '(', len(blob['img_blobs'])  , '/' , len(os.listdir(video_path)) , ')'
-    json.dump(blob, open(os.path.join('/home/t-yuche/gt-labeling/frame-subsample/keyframe-info', video_name + '.json'),  'w'))
+    json.dump(blob, open(os.path.join('/home/t-yuche/gt-labeling/frame-subsample/keyframe-info', video_name + '_uniform.json'),  'w'))
 
 
