@@ -50,12 +50,10 @@ def uniformSampling(blob, total_frame, sampling_freq = 30): # sampling_freq in f
             cur = int(kf['key_frame'].split('.')[0])
             nxt = int(blob['img_blobs'][idx + 1]['key_frame'].split('.')[0])
     
-        print cur, nxt    
         # upsample
         counter = 0
         add_frame = cur + sampling_freq * counter
         while ( add_frame < nxt ):
-            print add_frame, nxt
             # add frame
             img_blob = {}
             img_blob['key_frame'] = str(add_frame) + '.jpg'
@@ -124,8 +122,6 @@ if __name__ == "__main__":
             if k == 27:
                 break
             '''
-    print blob
-    print 'start upsampling'
     # uniform sampling
     blob = uniformSampling(blob, total_frame)   
     
