@@ -60,9 +60,9 @@ def genBow(rcnn_ws, vgg_ws, caption_ws):
     words = {}
     for w in rcnn_ws: 
         if w not in words:
-            words[w] = 5
+            words[w] = 3
         else:
-            words[w] += 5
+            words[w] += 3
 
     for w in vgg_ws:
         # compose vgg word
@@ -116,15 +116,14 @@ def getSuggestedLabel(rcnn_data, vgg_data, caption_data, start_frame, end_frame)
     return labels 
 
 
-def getSuggestedChoices(rcnn_data, vgg_data, caption_data, start_frame, end_frame):
+def getSuggestedChoices(rcnn_data, vgg_data, caption_data, start_frame):
 
     start_idx = int(start_frame.split('.')[0])
-    end_idx = int(end_frame.split('.')[0])
 
     
-    rcnn_data = filter(lambda x: int(x['image_path'].split('/')[-1].split('.')[0]) >= start_idx and int(x['image_path'].split('/')[-1].split('.')[0]) <= end_idx , rcnn_data) 
-    vgg_data = filter(lambda x: int(x['img_path'].split('/')[-1].split('.')[0]) >= start_idx and int(x['img_path'].split('/')[-1].split('.')[0]) <= end_idx , vgg_data) 
-    caption_data = filter(lambda x: int(x['img_path'].split('/')[-1].split('.')[0]) >= start_idx and int(x['img_path'].split('/')[-1].split('.')[0]) <= end_idx , caption_data) 
+    rcnn_data = filter(lambda x: int(x['image_path'].split('/')[-1].split('.')[0]) == start_idx, rcnn_data) 
+    vgg_data = filter(lambda x: int(x['img_path'].split('/')[-1].split('.')[0]) == start_idx, vgg_data) 
+    caption_data = filter(lambda x: int(x['img_path'].split('/')[-1].split('.')[0]) == start_idx, caption_data) 
   
     labels = []
     range_bows = {}
@@ -183,10 +182,12 @@ if __name__ == "__main__":
             # get labels, merge labels in range
             labels = [] 
             if idx == total_kframes - 1:
-                labels = getSuggestedChoices(rcnn_data, vgg_data, caption_data, keyframes[idx]['key_frame'], rcnn_data[len(rcnn_data)-1]['image_path'].split('/')[-1])
+                #labels = getSuggestedChoices(rcnn_data, vgg_data, caption_data, keyframes[idx]['key_frame'], rcnn_data[len(rcnn_data)-1]['image_path'].split('/')[-1])
+                labels = getSuggestedChoices(rcnn_data, vgg_data, caption_data, keyframes[idx]['key_frame'])
                 
             else:
-                labels = getSuggestedChoices(rcnn_data, vgg_data, caption_data, keyframes[idx]['key_frame'], keyframes[idx+1]['key_frame'])
+                #labels = getSuggestedChoices(rcnn_data, vgg_data, caption_data, keyframes[idx]['key_frame'], keyframes[idx+1]['key_frame'])
+                labels = getSuggestedChoices(rcnn_data, vgg_data, caption_data, keyframes[idx]['key_frame'])
  
             output_dict = {}
             label_dict = {}
