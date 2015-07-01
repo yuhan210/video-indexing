@@ -66,13 +66,14 @@ def getSuggestedLabel(rcnn_data, vgg_data, caption_data, start_frame, end_frame)
 if __name__ == "__main__":
 
  
-    templates = [x[:-1] for x in open('test.html').readlines()]
     video_list = [x.strip() for x in open('/home/t-yuche/deep-video/data/videos.txt').readlines()]
 
     # for each video
     for v in video_list:
-       
+      
+         
         print v 
+        templates = [x[:-1] for x in open('test.html').readlines()]
         rcnn_data = load_video_rcnn('/home/t-yuche/frame-analysis/rcnn-info', v)
         vgg_data = load_video_recog('/home/t-yuche/frame-analysis/recognition', v)
         caption_data = load_video_caption('/home/t-yuche/frame-analysis/caption', v)
@@ -124,7 +125,7 @@ if __name__ == "__main__":
         # write index file (luckyframe.html)
         output_html = templates
         output_html.insert(38, body_html)
-        output_html[19]  = '\t\tvideoId:' + v[-11:] 
+        output_html[19]  = '\t\tvideoId:"' + v[-11:] + '",'
         out_fh = open(out_file, 'w') 
         out_fh.write('\n'.join(output_html))
         out_fh.close()
