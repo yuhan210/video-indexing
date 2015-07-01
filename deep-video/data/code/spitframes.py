@@ -16,13 +16,18 @@ def spitframes(video_path, frame_output_folder):
 	cap.release()
 	return
 
+
+if len(sys.argv) != 3:
+    print 'Usage:', sys.argv[0], ' video_folder output_folder'
+    exit(-1)
+
 video_folder = sys.argv[1]
 output_folder = sys.argv[2]
 
 for v in os.listdir(video_folder):
-	new_videoname = '_'.join(v.split('.')[0].split(' '))
-	print output_folder, new_videoname
-	if not os.path.exists(os.path.join(output_folder, new_videoname)):	
-		os.makedirs(os.path.join(output_folder, new_videoname))
-	
-	spitframes(os.path.join(video_folder,v ), os.path.join(output_folder, new_videoname))
+    new_videoname = '_'.join(v.split('.')[0].split(' '))
+    print v
+    if not os.path.exists(os.path.join(output_folder, new_videoname)):	
+        os.makedirs(os.path.join(output_folder, new_videoname))
+        spitframes(os.path.join(video_folder,v ), os.path.join(output_folder, new_videoname))
+        print output_folder, new_videoname
