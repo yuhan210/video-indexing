@@ -83,8 +83,10 @@ def gen_html(video_name, max_choice = 15):
 
     # sort anno_data
     anno_keys = sorted(anno_data.keys(), key=lambda x: int(x.split('.')[0]))
+    print anno_keys
     for idx, img_name in enumerate(anno_keys):
-   
+  
+        print img_name 
         idx = int(img_name.split('.')[0])
         ocr = ocr_data[idx]
         ped = ped_data[idx]
