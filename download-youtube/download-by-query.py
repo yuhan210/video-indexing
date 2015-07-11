@@ -34,18 +34,21 @@ def parseWebpage(query_url):
  
 
 
-def getWatchUrls(query, max_number=50):
+def getWatchUrls(query, max_number=10, max_length = 300):
 
     # https://www.youtube.com/results?filters=creativecommons&search_query=dog+playing&page=1
-    query_prefix = "https://www.youtube.com/results?search_query=" + urllib.quote_plus(query) + "&filters=creativecommons&page="
+    query_prefix = 'https://www.youtube.com/results?search_query=' + urllib.quote_plus(query) + '&filters=creativecommons&page='
     watch_urls = []
-
+    print query_prefix
     page_number = 1
     while len(watch_urls) < max_number:
         
         query_url = query_prefix + str(page_number)
         page_urls = parseWebpage(query_url)
-        watch_urls.extend(page_urls)
+        for watch_url in page_urls:
+            video = pafy.new(watch_url) 
+            if video.length < max_length:# secs            
+                watch_urls += [watch_url]
         print page_number, page_urls, len(watch_urls)
         page_number += 1
     
@@ -55,7 +58,7 @@ if __name__ == "__main__":
 
     input_str = (raw_input('$ '))
 
-    watch_urls = getWatchUrls(input_str, 1)
+    watch_urls = getWatchUrls(input_str, 50)
     
     for watch_url in watch_urls:
         video = pafy.new(watch_url) 

@@ -16,7 +16,7 @@ def getNewVideoName(video):
     return new_videoname
 
     
-def downloadVideo(video, video_folder="/home/t-yuche/deep-video/data/videos", video_meta_folder="/home/t-yuche/deep-video/data/video-info"):
+def downloadVideo(video, video_folder="/home/t-yuche/remote-disk/videos", video_meta_folder="/home/t-yuche/remote-disk/video-info"):
 
     new_filename = getNewVideoName(video)  
     
