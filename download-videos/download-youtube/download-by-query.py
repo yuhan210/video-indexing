@@ -5,8 +5,11 @@ import urllib2
 import urllib
 import pafy
 import sys
+reload(sys)
+sys.setdefaultencoding("utf8")
 import json
 import re
+
 
 def parseWebpage(query_url):
 
@@ -25,7 +28,8 @@ def parseWebpage(query_url):
         exit(-1)
 
     for line in html_doc:
-        if line.find('</div><div class="yt-lockup-content">') >= 0:
+        if line.find('><div class="yt-lockup-content"><h3 class="yt-lockup-title"><a href="/watch?') >= 0:
+            print line
             watch_url = line.split('a href')[1].split('class=')[0].split('"')[1].split('v=')[1]
             watch_urls += [watch_url]
         
@@ -37,7 +41,8 @@ def parseWebpage(query_url):
 def getWatchUrls(query, max_number=10, max_length = 300):
 
     # https://www.youtube.com/results?filters=creativecommons&search_query=dog+playing&page=1
-    query_prefix = 'https://www.youtube.com/results?search_query=' + urllib.quote_plus(query) + '&filters=creativecommons&page='
+    #query_prefix = 'https://www.youtube.com/results?search_query=' + urllib.quote_plus(query) + '&filters=creativecommons&page='
+    query_prefix = 'https://www.youtube.com/results?search_query=' + urllib.quote_plus(query) + '&page='
     watch_urls = []
     print query_prefix
     page_number = 1
@@ -54,12 +59,36 @@ def getWatchUrls(query, max_number=10, max_length = 300):
     
     return watch_urls[:max_number]
     
+
 if __name__ == "__main__":
 
-    input_str = (raw_input('$ '))
+    if len(sys.argv) != 2:
+        print 'Usage:', sys.argv[0], ' test_mode'
+        exit(-1)
 
-    watch_urls = getWatchUrls(input_str, 50)
+    test_mode = int(sys.argv[1])
+     
+    input_str = (raw_input('$ '))
+   
+    if test_mode == 0:
+        with open('queries', 'a') as fh:
+            fh.write(input_str + '\n')
+    
+    watch_urls = getWatchUrls(input_str, 30)
     
     for watch_url in watch_urls:
         video = pafy.new(watch_url) 
-        downloadVideo(video) 
+        video_info = downloadVideo(video)
+        
+        if test_mode == 0:
+            # write download log      
+            with open('log', 'a') as fh:
+                output_str = input_str
+                for key in video_info:
+                    if key == 'description' or key == 'author' or key == 'keywords':
+                        continue
+                    if type(video_info[key]) == list:
+                        output_str += '\t' + ','.join(video_info[key])
+                    else:
+                        output_str += '\t' + str(video_info[key])
+                fh.write(output_str + '\n')

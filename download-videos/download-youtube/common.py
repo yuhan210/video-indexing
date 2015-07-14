@@ -19,15 +19,16 @@ def getNewVideoName(video):
 def downloadVideo(video, video_folder="/home/t-yuche/remote-disk/videos", video_meta_folder="/home/t-yuche/remote-disk/video-info"):
 
     new_filename = getNewVideoName(video)  
-    
-    best_video = video.getbest(preftype="mp4")
-    best_video.download(quiet=False, filepath=os.path.join(video_folder,  new_filename + ".mp4"))
-
+    print 'Downdloading %s' % new_filename
     # write video metadata in the json format
     v_info = createVideoMeatadata(video, new_filename)
     with open(os.path.join(video_meta_folder, new_filename + '.json'), 'w') as fh:
         json.dump(v_info, fh)
+    
+    best_video = video.getbest(preftype="mp4")
+    best_video.download(quiet=False, filepath=os.path.join(video_folder,  new_filename + ".mp4"))
 
+    return v_info
 
 def createVideoMeatadata(video_obj, new_filename): 
     
@@ -47,6 +48,11 @@ def createVideoMeatadata(video_obj, new_filename):
     v['published'] = video_obj.published
     v['rating'] = video_obj.rating
     v['viewcount'] = video_obj.viewcount
+    
+    best_video = video_obj.getbest(preftype="mp4")
+    v['videoquality'] = best_video.bitrate
+    v['videores'] = best_video.resolution
+    
 
     return v
 
