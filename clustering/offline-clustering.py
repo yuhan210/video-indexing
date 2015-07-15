@@ -331,24 +331,38 @@ def getPairwiseDist(all_nodes, frame_names):
     return dist 
 
 
-# pair_range: the range of 
+
 def getConstrainedPairwiseDist(clusters, pair_range = math.inf):
     
     darray = np.empty(len(clusters), len(clusters))
-    darray.fill(np.inf) 
-    for a_idx, a_node in enumerate(clusters):
+    darray.fill(np.inf)
 
-        # TODO: the range is wrong
-        for b_idx in xrange(a_idx+1, min(a_idx + pair_range + 1, len(clusters))):
-             
+    # for all the nodes that are active
+    active_nodes = [x if x['active'] for x in clusters]
+
+    # check nodes that are within range
+    for a_idx, a_node in enumerate(active_nodes):
+        for b_idx in xrange(len(active_nodes)):
+                
             b_node = clusters[b_idx] 
-            dist = 1 - getCosSimilarty(a_node[3], b_node[3]) 
-            darray[a_idx, b_idx] = dist
- 
+
+            # TODO: other constraints? 
+            within_range = False
+            for i in a_node['r_idx']:
+                for j in b_node['r_idx']:
+                    if abs(i-j) <= pair_range:
+                        within_range = True
+                        break
+
+            if not within_range:
+                break
+            dist = 1 - getCosSimilarty(a_node['tf'], b_node['tf']) 
+            darray[a_node['idx'], b_node['idx']] = dist
+
     return darray 
 
 def getActiveClusterNum(clusters):
-
+    
     counter = 0
     for cluster in clusters:
         if cluster['active']:
@@ -381,6 +395,7 @@ def cluster(all_nodes, num_clusters = 1):
         # merge the two closest clusters
         a_idx, b_idx = np.unravel_index(np.argmin(darray), darray.shape)
         dist = np.min(darray)
+
         # create new cluster
         # merge node a and b
         a_node = clusters[a_idx]
