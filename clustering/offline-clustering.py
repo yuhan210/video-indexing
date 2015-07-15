@@ -2,6 +2,7 @@ from tools.utils import load_video_recog, load_video_caption
 from scipy.cluster.hierarchy import ward, dendrogram, linkage, fcluster
 from scipy.spatial.distance import squareform
 from nltk.stem.wordnet import WordNetLemmatizer
+import copy
 import math
 import nltk
 import json
@@ -330,11 +331,8 @@ def getPairwiseDist(all_nodes, frame_names):
     return dist 
 
 
-
-
 # pair_range: the range of 
-def getConstrainedPairwiseDist(clusters, pair_range = aath.inf):
-
+def getConstrainedPairwiseDist(clusters, pair_range = math.inf):
     
     darray = np.empty(len(clusters), len(clusters))
     darray.fill(np.inf) 
@@ -344,7 +342,7 @@ def getConstrainedPairwiseDist(clusters, pair_range = aath.inf):
         for b_idx in xrange(a_idx+1, min(a_idx + pair_range + 1, len(clusters))):
              
             b_node = clusters[b_idx] 
-            dist = 1 - getCosSimilarty(a_node[2], b_node[2]) 
+            dist = 1 - getCosSimilarty(a_node[3], b_node[3]) 
             darray[a_idx, b_idx] = dist
  
     return darray 
@@ -353,7 +351,7 @@ def getActiveClusterNum(clusters):
 
     counter = 0
     for cluster in clusters:
-        if cluster[-1]:
+        if cluster['active']:
             counter += 1
 
     return counter
@@ -361,13 +359,18 @@ def getActiveClusterNum(clusters):
 def cluster(all_nodes, num_clusters = 1): 
 
     # data: a list of (frame_timestamp, tf)s, should be sorted by frame_timestamp
-    
     clusters = []
     # create clusters
     for idx, node in enumerate(all_nodes):
         time_stamp = node[0] # int frame number
         tf = node[1] # {desk:1, table:2}
-        clusters += [(idx, [time_stamp], tf, True)]
+        c = {}
+        c['idx'] = idx
+        c['ts'] = [time_stamp]
+        c['r_idx'] = [idx]
+        c['tf'] = tf
+        c['active'] = True
+        clusters += [c]
     
     linkage_matrix = []
     while getActiveClusterNum(clusters) > max(1, num_clusters):
@@ -376,18 +379,38 @@ def cluster(all_nodes, num_clusters = 1):
         darray = getConstrainedPairwiseDist(clusters, 1)              
   
         # merge the two closest clusters
-        a_idx, b_idx = np.unravel_index(np.argmax(darray), darray.shape)
-        clusters[a_idx][-1] = False
-        clusters[b_idx][-1] = False
+        a_idx, b_idx = np.unravel_index(np.argmin(darray), darray.shape)
+        dist = np.min(darray)
+        # create new cluster
+        # merge node a and b
+        a_node = clusters[a_idx]
+        b_node = clusters[b_idx] 
 
-        new_cluter = (len(clusters),[], )
-        clusters += [new_cluster]
-         
+        c = {}
+        c['idx'] = len(clusters)
+        c['ts'] = (a_node['ts'] + b_node['ts']).sort()
+        c['r_idx'] = (a_node['idx'] + b_node['idx']).sort()
+
+        # merge two term freq
+        tf = copy.deepcopy(a_node['tf'])
+        for key in b_node:
+            if key not in tf:
+                tf[key] = b_node[key]
+            else:
+                tf[key] += b_node[key]
+
+        c['tf'] = tf 
+        c['active'] = True
+        clusters += [c]
+        
+        # disable merged cluster
+        clusters[a_idx]['active'] = False
+        clusters[b_idx]['active'] = False
+
         # update cluster (linkage_matrix)  append [clusterID_1, clusterID_2, distance, # of observation in the new cluster]
-        linkage_matrix  
+        linkage_matrix.append([a_idx, b_idx, dist, len(c['r_idx'])])
             
-              
-
+    return clusters, np.array(linkage_matrix)
 
 if __name__ == "__main__":
 
