@@ -241,7 +241,7 @@ def getCosSimilarty(a_dict, b_dict):
         sumaa += a * a
         sumbb += b * b        
     
-    return sumab/(math.sqrt(sumaa)  * math.sqrt(sumbb))
+    return sumab/(math.sqrt(sumaa * sumbb))
 
 
 def getTimeDist(a_ts, b_ts, video_length):
@@ -297,19 +297,18 @@ def load_turker_labels(video_name, turker_label_folder = "/home/t-yuche/gt-label
         
         label_path = os.path.join(video_folder, frame_name)
         labels = json.load(open(label_path))['gt_labels']
-
-        print frame_name, labels 
+    
+        #TODO: wirhgt for the hierarchical words 
         ws = {}
         for choices in labels:
-            #print choices
             for choice in choices:
                 if choice not in ws:
                     ws[choice] = 1
                 else:
                     ws[choice] += 1
-        all_nodes += [ws]
+        all_nodes += [(int(frame_name.split('.')[0]) ,ws)]
 
-    return all_nodes, fs
+    return all_nodes
 
 def getGTNodeDist(a_node, b_node, a_framename, b_framename, length, w_word = 0.5, w_ts = 0.5):
     
@@ -332,32 +331,34 @@ def getPairwiseDist(all_nodes, frame_names):
 
 
 
-def getConstrainedPairwiseDist(clusters, pair_range = math.inf):
+def getConstrainedPairwiseDist(clusters, pair_range = 1E+10):
     
-    darray = np.empty(len(clusters), len(clusters))
+    darray = np.empty([len(clusters), len(clusters)], dtype=float)
     darray.fill(np.inf)
 
     # for all the nodes that are active
-    active_nodes = [x if x['active'] for x in clusters]
+    active_nodes = filter(lambda x: x['active'] == True,  clusters)
 
     # check nodes that are within range
     for a_idx, a_node in enumerate(active_nodes):
         for b_idx in xrange(len(active_nodes)):
-                
-            b_node = clusters[b_idx] 
+            
+            b_node = active_nodes[b_idx] 
+    
+            if a_idx == b_idx or a_node['active'] == False or b_node['active'] == 'False':
+                continue
 
             # TODO: other constraints? 
             within_range = False
-            for i in a_node['r_idx']:
-                for j in b_node['r_idx']:
-                    if abs(i-j) <= pair_range:
+            for i in a_node['n_idx']:
+                for j in b_node['n_idx']:
+                    if abs(i-j) <= pair_range and i != j:
                         within_range = True
                         break
 
-            if not within_range:
-                break
-            dist = 1 - getCosSimilarty(a_node['tf'], b_node['tf']) 
-            darray[a_node['idx'], b_node['idx']] = dist
+            if within_range:
+                dist = 1.0 - getCosSimilarty(a_node['tf'], b_node['tf']) 
+                darray[a_node['idx'], b_node['idx']] = dist
 
     return darray 
 
@@ -381,49 +382,48 @@ def cluster(all_nodes, num_clusters = 1):
         c = {}
         c['idx'] = idx
         c['ts'] = [time_stamp]
-        c['r_idx'] = [idx]
+        c['n_idx'] = [idx]
         c['tf'] = tf
         c['active'] = True
         clusters += [c]
     
     linkage_matrix = []
+    k = len(clusters)
     while getActiveClusterNum(clusters) > max(1, num_clusters):
         
         # get pairwise distance
         darray = getConstrainedPairwiseDist(clusters, 1)              
-  
         # merge the two closest clusters
         a_idx, b_idx = np.unravel_index(np.argmin(darray), darray.shape)
         dist = np.min(darray)
-
         # create new cluster
         # merge node a and b
         a_node = clusters[a_idx]
         b_node = clusters[b_idx] 
-
+        k -= 1
+        print 'c = ', len(clusters), 'k =', k  , 'merge:', a_node['idx'], 'and',  b_node['idx'], '(', a_idx, '/' , b_idx, ')'
         c = {}
         c['idx'] = len(clusters)
-        c['ts'] = (a_node['ts'] + b_node['ts']).sort()
-        c['r_idx'] = (a_node['idx'] + b_node['idx']).sort()
-
+        c['ts'] = sorted(a_node['ts'] + b_node['ts'])
+        c['n_idx'] = sorted(a_node['n_idx'] + b_node['n_idx'])
+        
         # merge two term freq
         tf = copy.deepcopy(a_node['tf'])
-        for key in b_node:
+        for key in b_node['tf']:
             if key not in tf:
-                tf[key] = b_node[key]
+                tf[key] = b_node['tf'][key]
             else:
-                tf[key] += b_node[key]
+                tf[key] += b_node['tf'][key]
 
         c['tf'] = tf 
         c['active'] = True
         clusters += [c]
-        
         # disable merged cluster
         clusters[a_idx]['active'] = False
         clusters[b_idx]['active'] = False
-
+        print c
         # update cluster (linkage_matrix)  append [clusterID_1, clusterID_2, distance, # of observation in the new cluster]
-        linkage_matrix.append([a_idx, b_idx, dist, len(c['r_idx'])])
+        linkage_matrix.append([a_idx, b_idx, dist, len(c['n_idx'])])
             
     return clusters, np.array(linkage_matrix)
 
@@ -435,24 +435,28 @@ if __name__ == "__main__":
     '''
     #video_name = "warty_pigs_through_google_glass_Xs3x3lCl8_E" 
     #video_name = "yongpyong_resort_south_korea_snowboarding_with_google_glass__part_3_1LzvqaAu_Mk"
-    #video_name = "beyonce__drunk_in_love__red_couch_session_by_dan_henig_a1puW6igXcg"
+    video_name = "beyonce__drunk_in_love__red_couch_session_by_dan_henig_a1puW6igXcg"
     #video_name = "thoroughbred_horse_through_googleglass_IbXdHo9CN1I"
-    video_name = "kids_playing_basketball"
+    #video_name = "kids_playing_basketball"
     recog_folder = "/home/t-yuche/frame-analysis/recognition"
     caption_folder = "/home/t-yuche/frame-analysis/caption"
-    #n_clusters = 3
+    n_clusters = 3
 
     # load labels from turkers
-    gt_nodes, frames = load_turker_labels(video_name)
-    gt_dist = getPairwiseDist(gt_nodes, frames) 
-    
-    linkage_matrix = linkage(gt_dist, method='average')
+    gt_nodes = load_turker_labels(video_name)
+    #gt_dist = getPairwiseDist(gt_nodes, frames) 
+    clusters, linkage_matrix = cluster(gt_nodes)
+    k, d = linkage_matrix.shape
     print linkage_matrix
-    exit(-1)
-    n_clusters, cluster_list, costs = selectClusterNum(linkage_matrix)
-    ax = dendrogram(linkage_matrix, orientation='right');
+    print clusters[int(linkage_matrix[k-1,0])]
+    print clusters[int(linkage_matrix[k-1,1])]
+    #n_clusters, cluster_list, costs = selectClusterNum(linkage_matrix)
+    #print n_clusters 
+ 
+    ax = dendrogram(linkage_matrix, orientation='right', count_sort='ascending')
+    print ax
     fc = fcluster(linkage_matrix, n_clusters,'maxclust') 
-    
+    print fc    
     node_to_cluster = {}
     cluster_to_node = [[] for x in xrange(n_clusters)]
     for idx, fc in enumerate(fc):
@@ -466,18 +470,18 @@ if __name__ == "__main__":
 
     plt.figure(2)
     plt.plot(range(len(gt_nodes)), cluster_num)
-    plt.xticks(range(len(gt_nodes)), frames, rotation = 'vertical')
+    plt.xticks(range(len(gt_nodes)), [x[0] for x in gt_nodes] , rotation = 'vertical')
     plt.xlabel('Frame Number')
     plt.ylabel('Cluster Number')
     plt.ylim([-1, n_clusters+1])
-    
+    '''
     plt.figure(3)
     plt.plot(cluster_list, costs, 'x')
     plt.xlabel('# of Clusters')
     plt.ylabel('Cluster merge cost')
+    '''
     plt.show()
     exit(-1)
-
     recog_data = load_video_recog(recog_folder, video_name) 
     #recog_data = recog_data[0:200]
 
@@ -531,8 +535,9 @@ if __name__ == "__main__":
     # clustering
     # average single complete
     linkage_matrix = linkage(dist, method='average')
+    print linkage_matrix
+    exit(-1)
     n_clusters = selectClusterNum(linkage_matrix)
-    print n_clusters 
     ax = dendrogram(linkage_matrix, orientation='right', no_plot='True');
     
     fc = fcluster(linkage_matrix, n_clusters,'maxclust') 
