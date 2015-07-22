@@ -1,1 +1,1 @@
-sudo mount -B ~/remote-disk /mnt
+mount 172.31.45.143:/volume1/data /mnt
