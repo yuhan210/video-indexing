@@ -1,0 +1,2 @@
+python /home/t-yuche/neuraltalk/python_features/vggclassify_from_feature.py --gpu --caffe ~/caffe/ --model_def /home/t-yuche/neuraltalk/python_features/VGG_ILSVRC_16_layers_deploy.prototxt --model /home/t-yuche/caffe/models/vgg_ilsvrc_16/VGG_ILSVRC_16_layers.caffemodel --files /home/t-yuche/neuraltalk/python_features/test_folder/img_tasks.txt --output_file /home/t-yuche/neuraltalk/python_features/test_folder/classify.json --features /home/t-yuche/neuraltalk/python_features/test_folder/test.pickle
+

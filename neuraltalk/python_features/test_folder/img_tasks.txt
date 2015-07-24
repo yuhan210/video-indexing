@@ -1,0 +1,3 @@
+/home/t-yuche/neuraltalk/python_features/test_folder/test_frames/cat_gray.jpg
+/home/t-yuche/neuraltalk/python_features/test_folder/test_frames/cat.jpg
+/home/t-yuche/neuraltalk/python_features/test_folder/test_frames/fish-bike.jpg
