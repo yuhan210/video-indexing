@@ -65,9 +65,15 @@ class VideosPlayerThread(threading.Thread):
         COLUMN_NUM = 5
 
         caps = []
+        video_lengths = []
         for idx, video_name in enumerate(self.video_names):
             video_path = os.path.join(VIDEO_FOLDER, video_name)
-            caps.append(cv2.VideoCapture(video_path))
+
+            cap = cv2.VideoCapture(video_path)
+            caps.append(cap)
+
+            video_length = int(cap.get(cv2.cv.CV_CAP_PROP_FRAME_COUNT))
+            video_lengths.append(video_length)
    
         #create windows
         for idx, video_name in enumerate(self.video_names):
@@ -79,39 +85,39 @@ class VideosPlayerThread(threading.Thread):
          
         cv2.waitKey(-1)
 
-        #open videos
+        #check if videos are opened - should always work
         for idx, cap in enumerate(caps):
             if (not cap.isOpened()):
+                print self.video_names[idx], 'not opened'
                 cv2.destroyAllWindows() 
                 return
 
         #play all videos
-        counter = 0
+        frame_counters = [0 for x in xrange(len(self.video_names))]
         while(not self.stop_event.is_set()):
-            #print 'frame_num:', counter
+            
             for idx, cap in enumerate(caps):
                 video_name = self.video_names[idx] 
-
-                ret, frame = cap.read()
                 
-                 
-                if ret == True:
-                    frame = cv2.resize(frame, (350, 300))
-                    cv2.imshow(video_name, frame)                
-                    cv2.resizeWindow(video_name, 50, 60)
-                    col = idx % 5
-                    row = idx / 5 
-                    cv2.moveWindow(video_name, col * 400, row * 400)
-                else:
-                    cap.release()
-                    cap = cv2.VideoCapture(os.path.join(VIDEO_FOLDER, video_name))
-                    #cv2.destroyAllWindows()
+                if frame_counters[idx] == video_lengths[idx]: # it is the last frame
+                    frame_counters[idx] = 0
+                    cap.set(cv2.cv.CV_CAP_PROP_POS_FRAMES, 0)
+               
+                  
+                ret, frame = cap.read()
+                frame = cv2.resize(frame, (350, 300))
+                cv2.imshow(video_name, frame)                
+                cv2.resizeWindow(video_name, 50, 60)
+                col = idx % 5
+                row = idx / 5 
+                cv2.moveWindow(video_name, col * 400, row * 400)
  
-            counter += 1  
+                frame_counters[idx] += 1
+
             c = cv2.waitKey(33)
-            if (c == 27):
-                break
    
+        for cap in caps:
+            cap.release()
         cv2.destroyAllWindows() 
     
 
@@ -180,7 +186,6 @@ if __name__ == "__main__":
         if query_str == 'quit' or query_str == 'exit':
             thread_stop_event.set()
             break
-    cv2.destroyAllWindows()
     '''
     threads = []
     
