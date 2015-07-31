@@ -1,7 +1,11 @@
 import threading
+import time
 import os
 import sys
 import cv2
+CLUSTER_PATH = '/home/t-yuche/clustering/clusterLib'
+sys.path.append(CLUSTER_PATH)
+from cluster import *
 
 VIDEO_FOLDER = "/home/t-yuche/deep-video/data/videos"
 
@@ -175,6 +179,12 @@ if __name__ == "__main__":
     
     video_names = [line.strip() for line in open(sys.argv[1]).readlines()]
     #thread_lock = threading.Lock()
+    
+    # start creating index
+    video_name = "beyonce__drunk_in_love__red_couch_session_by_dan_henig_a1puW6igXcg"
+    gt_nodes = load_turker_labels(video_name)
+    tic = time.time()
+    clusters, linkage_matrix = cluster(gt_nodes)
 
     thread_stop_event = threading.Event()
     thread = VideosPlayerThread(1, video_names, thread_stop_event)
@@ -182,10 +192,15 @@ if __name__ == "__main__":
     
     while True:
         
-        query_str = (raw_input('$ ')) 
-        if query_str == 'quit' or query_str == 'exit':
+        query_str = (raw_input('$ '))
+        print query_str 
+        if query_str.find('quit') >= 0 or query_str.find('exit') >= 0:
             thread_stop_event.set()
             break
+        else:
+            print 'processing query_str', query_str
+            video_portion = process_query(clusters, query_str)
+            print video_portion
     '''
     threads = []
     
