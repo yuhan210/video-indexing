@@ -174,6 +174,44 @@ def cluster(all_nodes, num_clusters = 1):
             
     return clusters, np.array(linkage_matrix)
 
+def process_query(clusters, query_str, portion_min_length = 15): # video_length is in secs
+    
+    query_tf = {}
+    for w in query_str.split(' '):
+        if w not in query_tf:
+            query_tf[w] = 1
+        else:
+            query_tf[w] += 1
+    print query_tf
+
+    # 
+    portion_min_length = min(portion_min_length * 30, max(clusters[-1]['n_idx']) - min(clusters[-1]['n_idx']))  
+
+
+    dfs_dists = [] 
+    # DFS    
+    cur_node = clusters[-1]
+    dfs_dists += [1-getCosSimilarty(query_tf, cur_node['tf'])]
+    while (len(cur_node['descs']) > 0) or (max(cur_node['n_idx']) - min(cur_node['n_idx']) > portion_min_length):
+
+        a_node = clusters[cur_node['descs'][0]]
+        b_node = clusters[cur_node['descs'][1]]
+
+        a_sim = getCosSimilarty(query_tf, a_node['tf'])
+        b_sim = getCosSimilarty(query_tf, b_node['tf'])
+
+        max_sim = max(a_sim, b_sim)
+        dfs_dists += [1-max_sim]
+
+        cur_node = b_node
+        if a_sim > b_sim:
+            query_tf[w] = 1
+            cur_node = a_node
+
+        print cur_node
+
+    return cur_node
+
 def plot_cluster(clusters, linkage_matrix):
     
     ax = dendrogram(linkage_matrix, count_sort='ascending', leaf_rotation= 90)
