@@ -15,8 +15,6 @@ import sys
 import math
 import numpy as np
 
-
-
 def getCosSimilarty(a_dict, b_dict):
     
     space = list(set(a_dict.keys()) | set(b_dict.keys()))
@@ -123,6 +121,7 @@ def cluster(all_nodes, num_clusters = 1):
         c['n_idx'] = [idx]
         c['tf'] = tf
         c['active'] = True
+        c['descs'] = []
         clusters += [c]
    
  
@@ -161,6 +160,7 @@ def cluster(all_nodes, num_clusters = 1):
 
         c['tf'] = tf 
         c['active'] = True
+        c['descs'] = [a_node['idx'] , b_node['idx']]
         clusters += [c]
 
         # disable merged cluster
@@ -179,18 +179,9 @@ def plot_cluster(clusters, linkage_matrix):
     ax = dendrogram(linkage_matrix, count_sort='ascending', leaf_rotation= 90)
     plt.show()
 
+def store_cluster(clusters, linkage_matrix, video_name):
+
+    for node in clusters:
+        print node      
 
 
-''' Example usage 
-if __name__ == "__main__":
-
-    video_name = "beyonce__drunk_in_love__red_couch_session_by_dan_henig_a1puW6igXcg"
-    recog_folder = "/home/t-yuche/frame-analysis/recognition"
-    caption_folder = "/home/t-yuche/frame-analysis/caption"
-
-    # load labels from turkers
-    gt_nodes = load_turker_labels(video_name)
-    clusters, linkage_matrix = cluster(gt_nodes)
-    #k, d = linkage_matrix.shape
-
-    plot_cluster(clusters, linkage_matrix) 
