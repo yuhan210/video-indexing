@@ -174,7 +174,19 @@ def cluster(all_nodes, num_clusters = 1):
             
     return clusters, np.array(linkage_matrix)
 
-def process_query(clusters, query_str, portion_min_length = 15): # video_length is in secs
+
+def match_indexes(indexes, query_str, portion_min_legnth = 15): # video_length is in secs
+    
+    matched_nodes = []    
+
+    for video_name in indexes:
+        best_node, score = match_index(indexes[video_name], query_str, portion_min_length)
+        matched_nodes += [(video_name, best_node, score)]
+    
+    return matched_nodes
+
+
+def match_index(clusters, query_str, portion_min_length = 15): # video_length is in secs
     
     query_tf = {}
     for w in query_str.split(' '):
@@ -182,7 +194,6 @@ def process_query(clusters, query_str, portion_min_length = 15): # video_length 
             query_tf[w] = 1
         else:
             query_tf[w] += 1
-    print query_tf
 
     # 
     portion_min_length = min(portion_min_length * 30, max(clusters[-1]['n_idx']) - min(clusters[-1]['n_idx']))  
@@ -200,17 +211,25 @@ def process_query(clusters, query_str, portion_min_length = 15): # video_length 
         a_sim = getCosSimilarty(query_tf, a_node['tf'])
         b_sim = getCosSimilarty(query_tf, b_node['tf'])
 
+        b_length = max(b_node['n_idx']) - min(b_node['n_idx'])
+        a_length = max(a_node['n_idx']) - min(a_node['n_idx'])
+
         max_sim = max(a_sim, b_sim)
         dfs_dists += [1-max_sim]
-
-        cur_node = b_node
+    
+          
+        node = b_node
+        length = b_length
         if a_sim > b_sim:
-            query_tf[w] = 1
-            cur_node = a_node
+            node = a_node
+            length = a_length
+        
+        if length < portion_min_length:
+            break
 
-        print cur_node
+        cur_node = node
 
-    return cur_node
+    return cur_node, getCosSimilarty(query_tf, cur_node['tf'])
 
 def plot_cluster(clusters, linkage_matrix):
     
