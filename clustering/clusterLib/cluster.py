@@ -176,9 +176,9 @@ def cluster(all_nodes, num_clusters = 1):
 
 
 def match_indexes(indexes, query_str, portion_min_length = 15): # video_length is in secs
-'''
-Return a list of tuples (video_name, best_node, score)
-'''
+    '''
+    Return a list of tuples (video_name, best_node, score)
+    '''
     
     matched_nodes = []    
 
