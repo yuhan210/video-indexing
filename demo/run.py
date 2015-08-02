@@ -1,4 +1,5 @@
 import threading
+import Queue
 import time
 import os
 import sys
@@ -9,61 +10,27 @@ from cluster import *
 
 VIDEO_FOLDER = "/home/t-yuche/deep-video/data/videos"
 
-def play_video(video_names):
-
-    COLUMN_NUM = 5
-
-
-    caps = []
-    for idx, video_name in enumerate(video_names):
-        video_path = os.path.join(VIDEO_FOLDER, video_name)
-        caps.append(cv2.VideoCapture(video_path))
-   
-    
-     
-    #create windows
-    for idx, video_name in enumerate(video_names):
-        cv2.namedWindow(video_name)
-        cv2.resizeWindow(video_name, 50, 60)
-        col = idx % 5
-        row = idx / 5 
-        cv2.moveWindow(video_name, col * 400, row * 400)
-         
-    cv2.waitKey(-1)
-
-    #open videos
-    for idx, cap in enumerate(caps):
-        if (not cap.isOpened()):
-            return
-
-    #play all videos
-    while(True):
-        for idx, cap in enumerate(caps):
-            ret, frame = cap.read()
-            
-            if ret == True:
-                frame = cv2.resize(frame, (350, 300))
-                cv2.imshow(video_names[idx], frame)                
-                cv2.resizeWindow(video_name, 50, 60)
-                col = idx % 5
-                row = idx / 5 
-                cv2.moveWindow(video_name, col * 400, row * 400)
-                
-        c = cv2.waitKey(33)
-        if (c == 27):
-            break
-   
-    cv2.destroyAllWindows() 
-    
+event_queue = []
 
 class VideosPlayerThread(threading.Thread):
 
     def __init__(self, threadID, video_names, stop_event):
-        threading.Thread.__init__(self)  
+        threading.Thread.__init__(self)
         self.threadID = threadID
         self.video_names = video_names
         self.stop_event = stop_event
-                
+        self.mailbox = Queue.Queue()
+        event_queue.append(self.mailbox)    
+
+
+
+    def stop(self, caps):
+        
+        for cap in caps:
+            cap.release()
+
+        cv2.destroyAllWindows() 
+    
 
     def run(self):
         COLUMN_NUM = 5
@@ -87,7 +54,7 @@ class VideosPlayerThread(threading.Thread):
             row = idx / 5 
             cv2.moveWindow(video_name, col * 400, row * 400)
          
-        cv2.waitKey(-1)
+        #cv2.waitKey(-1)
 
         #check if videos are opened - should always work
         for idx, cap in enumerate(caps):
@@ -99,7 +66,18 @@ class VideosPlayerThread(threading.Thread):
         #play all videos
         frame_counters = [0 for x in xrange(len(self.video_names))]
         while(not self.stop_event.is_set()):
-            
+            try:
+                ranked_list = self.mailbox.get(False)
+                print ranked_list
+                # move windows
+                for mv in ranked_list:
+                    col = idx % 5
+                    row = idx / 5
+                    print mv[0] 
+                    cv2.moveWindow(mv[0], col * 400, row * 400)
+                                         
+            except Queue.Empty, qe:
+                pass 
             for idx, cap in enumerate(caps):
                 video_name = self.video_names[idx] 
                 
@@ -112,64 +90,22 @@ class VideosPlayerThread(threading.Thread):
                 frame = cv2.resize(frame, (350, 300))
                 cv2.imshow(video_name, frame)                
                 cv2.resizeWindow(video_name, 50, 60)
+                '''
                 col = idx % 5
                 row = idx / 5 
                 cv2.moveWindow(video_name, col * 400, row * 400)
- 
+                '''
                 frame_counters[idx] += 1
 
             c = cv2.waitKey(33)
-   
-        for cap in caps:
-            cap.release()
-        cv2.destroyAllWindows() 
+  
+        self.stop(caps) 
+
+
+def rank_video(matched_list):
     
-
-
-class VideoPlayerThread(threading.Thread):
-
-    def __init__(self, threadID, video_name, video_path):
-        threading.Thread.__init__(self)  
-        self.threadID = threadID
-        self.video_name = video_name
-        self.video_path = video_path
-
-   
-    def run(self): 
-        print "Starting playing" , self.video_name
-        window_name = self.video_name
-        print window_name
-        #cv2.namedWindow(window_name)
-        cap = cv2.VideoCapture(self.video_path)
-
-        if (not cap.isOpened()):
-            return
-        while (True):
-        
-            ret, frame = cap.read()
-            
-            if ret:
-                frame = cv2.resize(frame, (350, 300))
-                cv2.imshow(video_names[idx], frame)                
-                col = self.threadID % 5
-                row = self.threading / 3 
-                cv2.moveWindow(video_name, col * 400, row * 400)
-                
-                key = cv2.waitKey(33)  
-                if key == 27: # ESC
-                    break
-            
-
-        cv2.destroyAllWindows()
-
-
-'''
-class VideoPlayerWindowThread(threading.Thread):
-
-    def __init__(self, threadID, video_names):
-       
-    def run(self)
-'''
+    ranked_list = sorted(matched_list, key = lambda x:x[2], reverse=True) 
+    return ranked_list
 
 if __name__ == "__main__":
 
@@ -181,17 +117,20 @@ if __name__ == "__main__":
     #thread_lock = threading.Lock()
     
     # start creating index
-    video_name = "beyonce__drunk_in_love__red_couch_session_by_dan_henig_a1puW6igXcg"
-    gt_nodes = load_turker_labels(video_name)
-    tic = time.time()
-    clusters, linkage_matrix = cluster(gt_nodes)
+    indexes = {}
+    for idx, video_name in enumerate(video_names): 
+        if idx == 2:
+            break
+        video_name = video_name.split('.')[0]
+        gt_nodes = load_turker_labels(video_name)
+        clusters, linkage_matrix = cluster(gt_nodes)
+        indexes[video_name] = clusters
 
     thread_stop_event = threading.Event()
     thread = VideosPlayerThread(1, video_names, thread_stop_event)
     thread.start()
     
     while True:
-        
         query_str = (raw_input('$ '))
         print query_str 
         if query_str.find('quit') >= 0 or query_str.find('exit') >= 0:
@@ -199,8 +138,10 @@ if __name__ == "__main__":
             break
         else:
             print 'processing query_str', query_str
-            video_portion = process_query(clusters, query_str)
-            print video_portion
+            # match against all videos
+            matched_list = match_indexes(indexes, query_str)
+            ranked_list = rank_video(matched_list)
+            event_queue[0].put(ranked_list)
     '''
     threads = []
     
