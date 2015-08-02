@@ -45,7 +45,7 @@ def printWordsWithProb(mil_prob, model, removeFunctional = False):
 
 if __name__ == "__main__":
 
-    if len(sys.argv) != 4:
+    if len(sys.argv) != 3:
         print 'Usage:', sys.argv[0], 'task_file out_file'
         exit(-1)
 
@@ -55,7 +55,6 @@ if __name__ == "__main__":
     top_k = 60
     blob = {}
     blob['imgblobs'] = []
-    print img_names
 
     prototxt_file = 'demoData/mil_finetune.prototxt.deploy';
     model_file = 'demoData/snapshot_iter_240000.caffemodel';
@@ -76,15 +75,13 @@ if __name__ == "__main__":
         probs  = []  
         for i in range(top_k):
             texts += [words[srt_inds[i]]]
-            probs += [sc[srt_inds[i]]]
+            probs += [float(sc[srt_inds[i]])]
         
-        img_blob = {}
-        # build up the output
         img_blob = {}
         img_blob['img_path'] = imName
         img_blob['caption_time'] = (toc-tic)
         img_blob['words'] = {'text': texts, 'prob':probs }
-        blob['imgblobs'] += img_blob
+        blob['imgblobs'].append(img_blob)
 
     print 'writing predictions to %s...' % (out_file, )
     json.dump(blob, open(out_file, 'w'))
