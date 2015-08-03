@@ -204,9 +204,10 @@ if __name__ == "__main__":
     index_file = sys.argv[2]
     
     # load index from index.pickle file
-    #indexes = {}
-    #with open(index_file, 'rb') as pickle_fh:
-    #   indexed = pickle.load(pickle_fh
+    indexes = {}
+    with open(index_file, 'rb') as pickle_fh:
+       indexes = pickle.load(pickle_fh)
+    '''
     indexes = {}
     for idx, video_name in enumerate(video_names): 
         if idx == 1:
@@ -215,7 +216,7 @@ if __name__ == "__main__":
         gt_nodes = load_turker_labels(video_name)
         clusters, linkage_matrix = cluster(gt_nodes)
         indexes[video_name] = clusters
-    
+    '''
     thread_stop_event = None 
     while True:
         query_str = (raw_input('$ '))
@@ -232,7 +233,7 @@ if __name__ == "__main__":
             ranked_list = []
             matched_list = match_indexes(indexes, query_str)
             ranked_list = rank_video(matched_list)
-            
+                    
             if len(ranked_list) == 0:
                 cv2.destroyAllWindows()
             #event_queue[0].put(ranked_list)
