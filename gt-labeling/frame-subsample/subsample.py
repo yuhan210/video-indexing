@@ -73,9 +73,27 @@ def getFrameDiff(prev_frame, cur_frame):
     
     return movement
 
+def loadVideos(frame_folder):
+
+    video_paths = []
+    for f in os.listdir(frame_folder):
+        video_path = os.path.join(frame_folder, f)
+        video_paths += [video_path]
+
+    return video_paths
+
 if __name__ == "__main__":
 
-    video_path = sys.argv[1]
+    if len(sys.argv) != 2:
+        print 'Usage:', sys.argv[0], ' video_index(int)'
+        exit(-1)
+
+    video_index = int(sys.argv[1])
+    video_paths = loadVideos('/mnt/frames')
+    if video_index >= len(video_paths):
+        exit(-1) 
+
+    video_path = video_paths[video_index]
     MOVETHRESH = 0.5  # ratio of the w * h
     state = 0 # state 0: waiting for frames/ state 1: waiting for clear frames 
 
