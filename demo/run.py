@@ -183,10 +183,10 @@ class VideosPlayerThread(threading.Thread):
         self.stop(caps) 
 
 
-def rank_video(matched_list):
+def rank_video(matched_list, score_thresh = 0.1):
      
     ranked_list = sorted(matched_list, key = lambda x:x[2], reverse=True)
-    ranked_list = filter(lambda x: x[2] > 0, ranked_list) 
+    ranked_list = filter(lambda x: x[2] > score_thresh, ranked_list) 
 
     return ranked_list
 
