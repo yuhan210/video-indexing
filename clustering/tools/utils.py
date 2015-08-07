@@ -1,7 +1,50 @@
 from nltk.stem.wordnet import WordNetLemmatizer
 import json
 import nltk
+import csv
 import os
+
+
+def load_suggested_labels(video_name, anno_folder="/home/t-yuche/gt-labeling/suggested-labels"):
+
+    files = os.listdir(os.path.join(anno_folder, video_name))
+    files = sorted(files, key=lambda x: int(x.split('.')[0])) 
+   
+    ds = {}
+    for f in files:
+        with open(os.path.join(anno_folder, video_name, f)) as json_file:
+            anno_data = json.load(json_file)  
+            ds[f.split('.')[0] + '.jpg'] = anno_data['choices']
+                     
+    return ds
+
+
+def load_turker_labels(amtresults_folder):
+    
+    ds = {}
+    for f in os.listdir(amtresults_folder):
+        csv_file = open(os.path.join(amtresults_folder, f))
+        csv_reader = csv.DictReader(csv_file, delimiter="\t")
+        
+        for row in csv_reader:
+            if row['Answer.n_selections'] != None and len(row['Answer.n_selections']) > 0:
+                video_name = row['Answer.video']
+                frame_name = row['Answer.frame_name']
+                selections = row['Answer.selections'].split(',')
+    
+                if video_name not in ds:
+                    ds[video_name] = []
+                
+                img_blob = {}
+                img_blob['frame_name'] = frame_name
+                img_blob['selections'] = selections
+                ds[video_name] += [img_blob]
+    
+             
+                #ds[video_name +  frame_name] = selections
+        csv_file.close()
+                 
+    return ds            
 
 def getVerbFromStr(sentence):
 
@@ -35,6 +78,17 @@ def getVerbTfFromCaps(captions, method = 'equal'):
 
     return verb_tf 
 
+def load_video_msr_caption(msrcaption_folder, video_name):
+
+    file_pref = os.path.join(msrcaption_folder, video_name)
+    
+    # load msr caption
+    with open(file_pref + '_msrcap.json') as json_file:
+        msrcap_data = json.load(json_file) 
+
+    msrcap_data = sorted(msrcap_data['imgblobs'], key=lambda x: int(x['img_path'].split('/')[-1].split('.')[0]))
+
+    return msrcap_data
 
 def load_video_peopledet(peopled_folder, video_name):
 
