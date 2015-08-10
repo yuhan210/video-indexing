@@ -8,6 +8,7 @@ import os
 import cPickle as pickle
 import math
 import scipy.io
+import sys
 
 from imagernn.solver import Solver
 from imagernn.imagernn_utils import decodeGenerator, eval_split
