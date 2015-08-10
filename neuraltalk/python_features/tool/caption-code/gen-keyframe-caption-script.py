@@ -58,7 +58,7 @@ if __name__ == "__main__":
         # append to run script
         fh_out.write('python /home/t-yuche/neuraltalk/python_features/extract_features.py  --gpu --caffe ~/caffe/ --model_def /home/t-yuche/neuraltalk/python_features/deploy_features.prototxt --model /home/t-yuche/caffe/models/vgg_ilsvrc_16/VGG_ILSVRC_16_layers.caffemodel --files ' +  new_task_filename + ' --out /home/t-yuche/neuraltalk/python_features/tool/pickle-data/' + v + '.pickle\n')
 
-        fh_out.write('python /home/t-yuche/neuraltalk/predict_on_images.py /home/t-yuche/neuraltalk/models/flickr8k_cnn_lstm_v1.p -r ' + video_path +  ' -t ' + new_task_filename  + ' -f  /home/t-yuche/neuraltalk/python_features/tool/pickle-data/' + v + '.pickle ' + '-of  /mnt/tags/fei-caption-keyframe/' + v + '_5_caption.json &\n\n')
+        fh_out.write('python /home/t-yuche/neuraltalk/predict_on_keyframes.py /home/t-yuche/neuraltalk/models/flickr8k_cnn_lstm_v1.p -r ' + video_path +  ' -t ' + new_task_filename  + ' -f  /home/t-yuche/neuraltalk/python_features/tool/pickle-data/' + v + '.pickle ' + '-of  /mnt/tags/fei-caption-keyframe/' + v + '_5_caption.json &\n\n')
 
     fh_out.close()
 
