@@ -5,6 +5,20 @@ import csv
 import os
 
 
+def loadKeyFrames(video_name):
+
+    KEYFRAME_FOLDER = '/home/t-yuche/gt-labeling/frame-subsample/keyframe-info'
+    keyframe_file = os.path.join(KEYFRAME_FOLDER, video_name + '_uniform.json')
+
+    with open(keyframe_file) as json_file:
+        keyframes = json.load(json_file)
+
+    FRAME_FOLDER = '/mnt/frames'
+    keyframe_filenames = [ os.path.join(FRAME_FOLDER, video_name, x['key_frame']) for x in keyframes['img_blobs'] ]
+
+    return keyframe_filenames
+
+
 def load_suggested_labels(video_name, anno_folder="/home/t-yuche/gt-labeling/suggested-labels"):
 
     files = os.listdir(os.path.join(anno_folder, video_name))
