@@ -18,7 +18,7 @@ parser.add_argument('--model_def',
 parser.add_argument('--model',
                     help='path to model parameters')
 parser.add_argument('--files',
-                    help='path to a file contsining a list of images')
+                    help='path to a file consisting a list of images')
 parser.add_argument('--gpu',
                     action='store_true',
                     help='whether to use gpu training')
@@ -40,7 +40,6 @@ def predict(in_data, net):
     Inputs:
     in_data: data batch
     """
-
     out = net.forward(**{net.inputs[0]: in_data})
     features =  out[net.outputs[0]]
     return features
