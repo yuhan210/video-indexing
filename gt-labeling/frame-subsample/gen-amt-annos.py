@@ -4,6 +4,13 @@ import sys
 import json
 import os
 
+def removeStopWordsFromWordlist(list_ws):
+    ws = []
+    for s in list_ws:
+       ws.extend( [w for w in s if w not in stopwords.words('english') and w.find('background') < 0] )
+
+    return ws
+
 def removeStopWords(list_str):
     ws = []
     for s in list_str:
@@ -116,11 +123,12 @@ def getSuggestedLabel(rcnn_data, vgg_data, caption_data, start_frame, end_frame)
     return labels 
 
 
+
+
 def getSuggestedChoices(rcnn_data, vgg_data, caption_data, start_frame):
 
     start_idx = int(start_frame.split('.')[0])
 
-    
     rcnn_data = filter(lambda x: int(x['image_path'].split('/')[-1].split('.')[0]) == start_idx, rcnn_data) 
     vgg_data = filter(lambda x: int(x['img_path'].split('/')[-1].split('.')[0]) == start_idx, vgg_data) 
     caption_data = filter(lambda x: int(x['img_path'].split('/')[-1].split('.')[0]) == start_idx, caption_data) 
@@ -152,43 +160,123 @@ def getSuggestedChoices(rcnn_data, vgg_data, caption_data, start_frame):
     return labels 
     
 
+def genBow(rcnn_ws, vgg_ws, fei_caption_ws, msr_caption_ws):
+
+    words = {}
+    for w in rcnn_ws: 
+        if w not in words:
+            words[w] = 3
+        else:
+            words[w] += 3
+
+    for w in vgg_ws:
+        # compose vgg word
+        w = composeVGGWordnet(w)
+        if w not in words:
+            words[w] = 3
+        else:
+            words[w] += 3
+
+    for w in fei_caption_ws:
+        if w not in words:
+            words[w] = 1
+        else:
+            words[w] += 1
+
+    for w in msr_caption_ws:
+        if w not in words:
+            words[w] = 3
+        else:   
+            words[w] += 3
+
+    return words
+
+
+def getSuggestedChoices(rcnn_data, vgg_data, fei_caption_data, msr_caption_data, frame_name):
+
+    start_idx = int(frame_name.split('.')[0])
+
+    rcnn_data = filter(lambda x: int(x['image_path'].split('/')[-1].split('.')[0]) == start_idx, rcnn_data) 
+    vgg_data = filter(lambda x: int(x['img_path'].split('/')[-1].split('.')[0]) == start_idx, vgg_data) 
+    fei_caption_data = filter(lambda x: int(x['img_path'].split('/')[-1].split('.')[0]) == start_idx, fei_caption_data) 
+    msr_caption_data = filter(lambda x: int(x['img_path'].split('/')[-1].split('.')[0]) == start_idx, msr_caption_data) 
+ 
+    assert(len(rcnn_data) == 1) 
+    assert(len(vgg_data) == 1) 
+    assert(len(fei_caption_data) == 1) 
+    assert(len(msr_caption_data) == 1)
+    
+ 
+    labels = []
+    range_bows = {}
+    for idx in xrange(len(rcnn_data)):
+
+        ## process fast-rcnn
+        rcnn_ws = []
+        for rcnn_idx, pred in enumerate(rcnn_data[idx]['pred']['text']):
+
+            ## the confidence is higher than 10^(-3) and is not background
+            if rcnn_data[idx]['pred']['conf'][rcnn_idx] > 0.0005 and  pred.find('background') < 0:
+                rcnn_ws += [pred]
+                
+        ## process vgg
+        vgg_ws = [w for w in vgg_data[idx]['pred']['text']]
+         
+        ## process neuraltalk
+        fei_caption_ws = removeStopWords(fei_caption_data[idx]['candidate']['text'])
+    
+        ## process msr captioning
+        msr_caption_ws = removeStopWordsFromWordlist(msr_caption_data[idx]['words']['text'])
+
+        bow = genBow(rcnn_ws, vgg_ws, caption_ws, msr_caption_ws) 
+        for w in bow:
+            if w not in range_bows:
+                range_bows[w] = 1
+            else:
+                range_bows[w] += 1
+
+    range_bows = sorted(range_bows.items(), key=lambda x: x[1], reverse=True)    
+    labels = [x for x in range_bows]
+    return labels 
+    
+
 if __name__ == "__main__":
 
  
-    video_list = [x.strip() for x in open('/home/t-yuche/deep-video/data/videos.txt').readlines()]
+    video_list = [x.strip() for x in open('/mnt/videos.txt').readlines()]
 
     # for each video
     for v in video_list:
 
         print v 
-        anno_folder = os.path.join('/home/t-yuche/gt-labeling/frame-subsample/annos', v)
+        anno_folder = os.path.join('/mnt/labels-for-turkers', v)
         if not os.path.exists(anno_folder):
             os.mkdir(anno_folder)
    
-        rcnn_data = load_video_rcnn('/home/t-yuche/frame-analysis/rcnn-info', v)
-        vgg_data = load_video_recog('/home/t-yuche/frame-analysis/recognition', v)
-        caption_data = load_video_caption('/home/t-yuche/frame-analysis/caption', v)
- 
-        keyframes = json.load(open('./keyframe-info/' + v + '_uniform.json'))['img_blobs']
+        rcnn_data = load_video_rcnn('/mnt/tags/rcnn-info', v)
+        vgg_data = load_video_recog('/mnt/tags/vgg-classify-keyframe', v)
+        fei_caption_data = load_video_caption('/mnt/tags/fei-caption-keyframe', v)
+        msr_cap_data = load_video_msr_caption('/mnt/tags/msr-caption-keyframe', v)
+
+        keyframes = loadKeyFrameFilenames(v)
 
         total_kframes = len(keyframes)
-        total_frames = len(rcnn_data)
       
         # process possible labels
         for idx, kf in enumerate(keyframes):
             kf_name = kf['key_frame']
             frame_idx = int(kf_name.split('.')[0])
             
-            # get labels, merge labels in range
+            # get labels
             labels = [] 
             if idx == total_kframes - 1:
                 #labels = getSuggestedChoices(rcnn_data, vgg_data, caption_data, keyframes[idx]['key_frame'], rcnn_data[len(rcnn_data)-1]['image_path'].split('/')[-1])
-                labels = getSuggestedChoices(rcnn_data, vgg_data, caption_data, keyframes[idx]['key_frame'])
+                labels = getSuggestedChoices(rcnn_data, vgg_data, caption_data, msr_cap_data, kf_name)
                 
             else:
                 #labels = getSuggestedChoices(rcnn_data, vgg_data, caption_data, keyframes[idx]['key_frame'], keyframes[idx+1]['key_frame'])
-                labels = getSuggestedChoices(rcnn_data, vgg_data, caption_data, keyframes[idx]['key_frame'])
- 
+                labels = getSuggestedChoices(rcnn_data, vgg_data, caption_data, msr_cap_data, kf_name)
+
             output_dict = {}
             label_dict = {}
             for idx, label in enumerate(labels[:20]):
