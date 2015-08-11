@@ -4,9 +4,3 @@ Keyframe subsampling
 1. subsample.py -- core code. Subsample frames -- uniformly subsample frames within each scene
 2. gen-batch-script.py -- generate the batch script for subsample.py
 
----
-
-Suggested annotation generation
-
-- gen-amt-annos.py
-
