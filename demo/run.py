@@ -1,6 +1,7 @@
 import threading
 import Queue
 import pickle
+import math
 import time
 import os
 import sys
@@ -9,18 +10,29 @@ CLUSTER_PATH = '/home/t-yuche/clustering/clusterLib'
 sys.path.append(CLUSTER_PATH)
 from cluster import *
 
-VIDEO_FOLDER = "/home/t-yuche/deep-video/data/videos"
+import matplotlib
+import matplotlib.pyplot as plt
+try:
+    plt.style.use('ggplot')
+except:
+    pass
+
+
+
+#VIDEO_FOLDER = "/home/t-yuche/deep-video/data/videos"
+VIDEO_FOLDER = "/mnt/videos"
 
 event_queue = []
 
 class RankedVideoPlayer(threading.Thread):
 
-    def __init__(self, threadID, ranked_videos, stop_event):
+    def __init__(self, threadID, ranked_videos, stop_event, query_str):
         threading.Thread.__init__(self)
         self.threadID = threadID
         # (video_name, best_node, score)
         self.ranked_videos = ranked_videos
         self.stop_event = stop_event
+        self.query_str = query_str
 
     def stop(self, caps):
         
@@ -53,13 +65,14 @@ class RankedVideoPlayer(threading.Thread):
         caps, video_chunks = self.init_videos(video_names, self.ranked_videos) 
    
         #create windows
+        '''
         for idx, video_name in enumerate(video_names):
             cv2.namedWindow(video_name)
             cv2.resizeWindow(video_name, 50, 60)
             col = idx % 5
             row = idx / 5 
             cv2.moveWindow(video_name, col * 400, row * 400)
-         
+        '''
 
         #check if videos are opened - should always work
         for idx, cap in enumerate(caps):
@@ -70,26 +83,55 @@ class RankedVideoPlayer(threading.Thread):
             else:
                 cap.set(cv2.cv.CV_CAP_PROP_POS_FRAMES, video_chunks[idx][0])
 
+        #stagger counter
+        hashed_value = int(abs(hash(self.query_str)))
+        stagger_counter = []
+        for idx, dummy in enumerate(caps):
+            
+            if idx == 0:
+                delayed_counter = hashed_value % 10
+            else:
+                delayed_counter = (hashed_value / math.pow(10, idx)) % 10
+
+            stagger_counter += [delayed_counter * 15]
 
         #play all videos
         frame_counters = [x[0] for x in video_chunks]
+        
         while(not self.stop_event.is_set()):
-
+        
+            
+            n_playing_video = 0 
             for idx, cap in enumerate(caps):
                 video_name = video_names[idx] 
                 
                 if frame_counters[idx] == video_chunks[idx][1]: # need to replay
-                    frame_counters[idx] = video_chunks[idx][0]
-                    cap.set(cv2.cv.CV_CAP_PROP_POS_FRAMES, video_chunks[idx][0])
+                    #frame_counters[idx] = video_chunks[idx][0]
+                    cv2.destroyWindow(video_name)
+                    continue
+                    #cap.set(cv2.cv.CV_CAP_PROP_POS_FRAMES, video_chunks[idx][0])
                
-                  
-                ret, frame = cap.read()
-                frame = cv2.resize(frame, (350, 300))
-                cv2.imshow(video_name, frame)                
-                frame_counters[idx] += 1
-
-            c = cv2.waitKey(33)
-  
+                ## creating stagger effect
+                if stagger_counter[idx] > 0:
+                    stagger_counter[idx] -= 1 
+                else:
+                    #if stagger_counter[idx] == 0:
+                    #    cv2.namedWindow(video_name)
+                    #    stagger_counter[idx] -= 1 
+                    
+                    ret, frame = cap.read()
+                    frame = cv2.resize(frame, (350, 300))
+                    cv2.imshow(video_name, frame)                
+                    col = n_playing_video % 5
+                    row = n_playing_video / 5 
+                    cv2.moveWindow(video_name, col * 400, row * 350)
+                    frame_counters[idx] += 1
+                    n_playing_video += 1
+            
+            if n_playing_video > 0:
+                c = cv2.waitKey(33/(n_playing_video * 2))
+            else:
+                c = cv2.waitKey(33)
         self.stop(caps) 
  
     
@@ -196,17 +238,29 @@ def rank_video(matched_list, score_thresh = 0.1):
 
 if __name__ == "__main__":
 
-    if (len(sys.argv) != 3):
-        print 'Usage:', sys.argv[0], 'video_names index_file'
+    '''    
+    if (len(sys.argv) != 1):
+        print 'Usage:', sys.argv[0], 'video_names'
         exit(-1)
-    
     video_names = [line.strip() for line in open(sys.argv[1]).readlines()]
-    index_file = sys.argv[2]
+    '''
+    old_index_file = 'index.pickle'
+    index_file = './tmp/100_index_file.pickle'
     
     # load index from index.pickle file
     indexes = {}
     with open(index_file, 'rb') as pickle_fh:
        indexes = pickle.load(pickle_fh)
+   
+    old_indexes = {} 
+    with open(old_index_file, 'rb') as pickle_fh:
+       old_indexes = pickle.load(pickle_fh)
+
+    indexes.update(old_indexes)
+    video_names = indexes.keys()
+    #print indexes
+    print video_names
+    print len(video_names)
     '''
     indexes = {}
     for idx, video_name in enumerate(video_names): 
@@ -233,18 +287,23 @@ if __name__ == "__main__":
             ranked_list = []
             matched_list = match_indexes(indexes, query_str)
             ranked_list = rank_video(matched_list)
-                    
+            
+            #for l in ranked_list:
+            #    plt.plot(range(len(l[3])),l[3])
+            #    plt.show()
+                
             if len(ranked_list) == 0:
                 cv2.destroyAllWindows()
+                print '0 matched videos'
             #event_queue[0].put(ranked_list)
             else:
                 if thread_stop_event != None: 
                     thread_stop_event.set()
                     play_video_thread.join()
                     play_video_thread = None
-                    
                 thread_stop_event = threading.Event()
-                play_video_thread = RankedVideoPlayer(2, ranked_list, thread_stop_event) 
+                
+                play_video_thread = RankedVideoPlayer(2, ranked_list[:15], thread_stop_event, query_str) 
                 play_video_thread.start()
     '''
     threads = []
