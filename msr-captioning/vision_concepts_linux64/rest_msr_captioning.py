@@ -69,14 +69,14 @@ if __name__ == "__main__":
     prototxt_file = 'demoData/mil_finetune.prototxt.deploy';
     model_file = 'demoData/snapshot_iter_240000.caffemodel';
     vocab_file = 'demoData/vocab_train.pkl';
-    #model = loadModel(prototxt_file, model_file, vocab_file);
+    model = loadModel(prototxt_file, model_file, vocab_file);
     
     for video_name in os.listdir(FRAME_FOLDER):
         print video_name 
     
         msr_data = loadProcessedTags(video_name)
         processed_frames = [x['img_path'] for x in msr_data]
-        frame_folder = os.path.join(FRAME_FOLDER, video_name)
+        
         outfile_path = os.path.join(MSR_FOLDER, video_name + '_msrcap.json')
 
         if os.path.exists(outfile_path):
@@ -84,20 +84,16 @@ if __name__ == "__main__":
             continue
         
         frame_folder = os.path.join(FRAME_FOLDER, video_name)
-    
         
         blob = {}
         blob['imgblobs'] = []
-        ##
         blob['imgblobs'] = blob['imgblobs'] + msr_data
-        ##
         for frame_name in os.listdir(frame_folder):
             imName = os.path.join(frame_folder, frame_name)
             
             if imName in processed_frames:       
                 continue
 
-            ##
             tic = time.time()
             mil_prob, sc = testImg(imName, model)
             toc = time.time()
@@ -116,7 +112,7 @@ if __name__ == "__main__":
             img_blob['words'] = {'text': texts, 'prob':probs }
             blob['imgblobs'].append(img_blob)
 
-        print 'writing predictions to %s...' % (out_file, )
-        json.dump(blob, open(out_file, 'w'))
+        print 'writing predictions to %s...' % (outfile_path, )
+        json.dump(blob, open(outfile_path, 'w'))
 
 
