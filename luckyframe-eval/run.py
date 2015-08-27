@@ -1,4 +1,5 @@
 from nltk.corpus import stopwords
+import operator
 import time
 import sys
 TOOL_PATH = '/home/t-yuche/clustering/tools'
@@ -11,7 +12,8 @@ try:
 except:
     pass
 
-STOPWORDS = ['inside', 'near', 'two', 'day', 'front']
+STOPWORDS = ['inside', 'near', 'two', 'day', 'front', u'i', u'me', u'my', u'myself', u'we', u'our', u'ours', u'ourselves', u'you', u'your', u'yours', u'yourself', u'yourselves', u'he', u'him', u'his', u'himself', u'she', u'her', u'hers', u'herself', u'it', u'its', u'itself', u'they', u'them', u'their', u'theirs', u'themselves', u'what', u'which', u'who', u'whom', u'this', u'that', u'these', u'those', u'am', u'is', u'are', u'was', u'were', u'be', u'been', u'being', u'have', u'has', u'had', u'having', u'do', u'does', u'did', u'doing', u'a', u'an', u'the', u'and', u'but', u'if', u'or', u'because', u'as', u'until', u'while', u'of', u'at', u'by', u'for', u'with', u'about', u'against', u'between', u'into', u'through', u'during', u'before', u'after', u'above', u'below', u'to', u'from', u'up', u'down', u'in', u'out', u'on', u'off', u'over', u'under', u'again', u'further', u'then', u'once', u'here', u'there', u'when', u'where', u'why', u'how', u'all', u'any', u'both', u'each', u'few', u'more', u'most', u'other', u'some', u'such', u'no', u'nor', u'not', u'only', u'own', u'same', u'so', u'than', u'too', u'very', u's', u't', u'can', u'will', u'just', u'don', u'should', u'now']
+
 
 def removeStopWordsFromWordlist(list_ws):
 
@@ -79,28 +81,55 @@ def naive_subsample_frames(video_name, FRAME_RETAIN_RATE):
     return retained_frames
 
 
+def get_combined_tfs(tfs_dict):
 
-#def get_all_words():
+    combined_tfs = {}
+    for d in tfs_dict:
+        for w in d['tf']:
+            if w in combined_tfs:
+                combined_tfs[w] = 1
+            else:
+                combined_tfs[w] += 1
 
-def detailed_measure(all_tf, subsampled_tf): 
+    return combined_tfs
+
+def detailed_measure(all_tfs_dict, subsampled_tfs_dict): 
     '''
     # of subsampled words/# of all words
     '''
+    all_tf = get_combined_tfs(all_tfs_dict) 
+    subsampled_tf = get_combined_tfs(subsampled_tfs_dict)
 
     return len(subsampled_tf)/(len(all_tf) * 1.0)
     
 
+def hist_measure(all_tfs_dict, subsampled_tfs_dict):
+    '''
+    similarity of the word distribution
+    '''
+    all_tf = get_combined_tfs(all_tfs_dict)
+    subsampled_tf = get_combined_tfs(subsampled_tfs_dict)
 
-#def hist_measure():
-'''
-similarity of the word distribution
-'''
+    sorted_all_tf = sorted(all_tf.items(), key=operator.itemgetter(1))
+
+    # create subsampled histogram
+    sub_hist = []
+    for item in sorted_all_tf:
+        if item[0] in subsample_tf:
+            sub_hist += [subsample_tf[item[0]]]
+        else:
+            sub_hist += [0]
+
+    all_hist = [x[1] for x in sorted_all_tf]
+
+    plt.plot(range(len(all_hist)), all_hist, 'o-r') 
+    plt.plot(range(len(all_hist)), sub_hist, 'x-b') 
+    plt.show()
 
 #def time_dist_measure():
 '''
 '''
 
-#def combine_cnns():
     
 def composeVGGWordnet(w, wordnet_tree_path = 'new_synset_word.txt'):
     
@@ -199,7 +228,7 @@ def getSuggestedChoices(rcnn_data, vgg_data, fei_caption_data, msr_caption_data,
     
     for w_idx, w in enumerate(msr_caption_data[idx]['words']['text']):
         score = float(msr_caption_data[idx]['words']['prob'][w_idx])
-        if w not in stopwords.words('english') and w.find('background') < 0:
+        if w not in STOPWORDS and w.find('background') < 0:
             if w not in words:
                 words[w] = max(1, 5 + score)
             else:
@@ -211,13 +240,12 @@ def getSuggestedChoices(rcnn_data, vgg_data, fei_caption_data, msr_caption_data,
     return labels 
     
 
-
-
 def naive_combine_models(video_name, selected_frames, _vgg_data, _msr_data, _rcnn_data):
     
     words = {}
+    tfs = []
     for fid, frame_name in enumerate(selected_frames):
-        print fid, '/', len(selected_frames)
+        #print fid, '/', len(selected_frames)
         frame_id = int(frame_name.split('.')[0])
         
         rcnn_data = filter(lambda x: int(x['image_path'].split('/')[-1].split('.')[0]) == frame_id, _rcnn_data)
@@ -232,20 +260,18 @@ def naive_combine_models(video_name, selected_frames, _vgg_data, _msr_data, _rcn
                 ## the confidence is higher than 10^(-3) and is not background
                 if rcnn_data[0]['pred']['conf'][rcnn_idx] > 0.0005 and  pred.find('background') < 0:
                     rcnn_ws += [pred]
-         
  
         vgg_ws = []
         if len(vgg_data) > 0:        
             ## process vgg
             vgg_ws = [w for w in vgg_data[0]['pred']['text']]
 
-
+        '''
         msr_caption_ws = [] 
         if len(msr_data) > 0:
             ## process msr captioning
             msr_caption_ws = removeStopWordsFromWordlist(msr_data[0]['words']['text'])
-
-        
+        '''
         for w in rcnn_ws:
             if w not in words:
                 words[w] = 1
@@ -260,14 +286,27 @@ def naive_combine_models(video_name, selected_frames, _vgg_data, _msr_data, _rcn
                 words[w] += 1
         
         for w_idx, w in enumerate(msr_data[0]['words']['text']):
-            score = float(msr_data[0]['words']['prob'][w_idx])
-            if w not in stopwords.words('english') and w.find('background') < 0:
+            #score = float(msr_data[0]['words']['prob'][w_idx])
+            if w not in STOPWORDS and w.find('background') < 0:
                 if w not in words:
                     words[w] = 1
                 else:
                     words[w] += 1
+        tfs += [{'frame_name': frame_name, 'tf': words}]
 
-    return words
+    return words, tfs
+
+def subsample_tf(video_name, selected_frames, tfs):
+   
+    tfs = []
+    for fid, frame_name in enumerate(selected_frames):
+        #print fid, '/', len(selected_frames)
+        frame_id = int(frame_name.split('.')[0])
+        
+        tf = filter(lambda x: int(x['frame_name'].split('.')[0]) == frame_id, tfs)
+        tfs += [tf]  
+
+    return tfs
 
 if __name__ == "__main__":
    
@@ -281,7 +320,6 @@ if __name__ == "__main__":
             continue
       
         #or not os.path.exists(os.path.join('/mnt/tags/fei-caption-all', video_name)) 
-
         # load tags 
         _vgg_data = load_video_recog('/mnt/tags/vgg-classify-all', video_name)
         #_fei_caption_data = load_video_caption('/mnt/tags/fei-caption-all', video_name)
@@ -292,16 +330,18 @@ if __name__ == "__main__":
         frame_names = os.listdir(os.path.join('/mnt/frames', video_name))
         frame_names = sorted(frame_names, key= lambda x: int(x.split('.')[0]))
         print 'start getting tfs for all frames'
-        all_tfs = naive_combine_models(video_name, frame_names, _vgg_data, _msr_cap_data, _rcnn_data) 
+        all_words, all_tfs = naive_combine_models(video_name, frame_names, _vgg_data, _msr_cap_data, _rcnn_data) 
         print 'Done loading tfs for all frames'
         
         # uniformly subsample frames 
         FRAME_RETAIN_RATE = 10/100. 
-        for frame_rate in [0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6]:
+        #for frame_rate in [0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6]:
+        for frame_rate in [0.1]:
             retained_frames = naive_subsample_frames(video_name, frame_rate)
             print 'Done loading tfs for subsampled frames'
-            subsampled_tfs = naive_combine_models(video_name, retained_frames, _vgg_data, _msr_cap_data, _rcnn_data) 
+            subsampled_tfs = subsample_tf(video_name, retained_frames, tfs) 
        
         
-            print frame_rate, detailed_measure(all_tfs, subsampled_tfs) 
+            print frame_rate, detailed_measure(all_tfs, subsampled_tfs)
+            hist_measure(all_tfs, subsampled_tfs) 
         break 
