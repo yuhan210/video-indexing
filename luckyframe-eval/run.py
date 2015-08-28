@@ -86,7 +86,7 @@ def get_combined_tfs(tfs_dict):
     combined_tfs = {}
     for d in tfs_dict:
         for w in d['tf']:
-            if w in combined_tfs:
+            if w not in combined_tfs:
                 combined_tfs[w] = 1
             else:
                 combined_tfs[w] += 1
