@@ -62,17 +62,15 @@ def uniform_subsample(video_name, DROP_FRAME_PERCENTAGE):
     return retained_frames
 
 
-def naive_subsample_frames(video_name, FRAME_RETAIN_RATE):
+def naive_subsample_frames(all_frames, FRAME_RETAIN_RATE):
 
-    frame_names = os.listdir(os.path.join('/mnt/frames', video_name))
-    frame_names = sorted(frame_names, key= lambda x: int(x.split('.')[0]))
 
-    n_picked_frames = len(frame_names) * FRAME_RETAIN_RATE
-    step = n_picked_frames/((len(frame_names) ) * 1.0)
+    n_picked_frames = len(all_frames) * FRAME_RETAIN_RATE
+    step = n_picked_frames/((len(all_frames) ) * 1.0)
     track = 0
     counter = 0
     retained_frames = [] 
-    for idx, frame_name in enumerate(frame_names):
+    for idx, frame_name in enumerate(all_frames):
         if int(track) == counter:
             retained_frames += [frame_name]
             counter += 1
@@ -99,7 +97,6 @@ def detailed_measure(all_tfs_dict, subsampled_tfs_dict):
     '''
     all_tf = get_combined_tfs(all_tfs_dict) 
     subsampled_tf = get_combined_tfs(subsampled_tfs_dict)
-
     return len(subsampled_tf)/(len(all_tf) * 1.0)
     
 
@@ -115,8 +112,8 @@ def hist_measure(all_tfs_dict, subsampled_tfs_dict):
     # create subsampled histogram
     sub_hist = []
     for item in sorted_all_tf:
-        if item[0] in subsample_tf:
-            sub_hist += [subsample_tf[item[0]]]
+        if item[0] in subsampled_tf:
+            sub_hist += [subsampled_tf[item[0]]]
         else:
             sub_hist += [0]
 
@@ -242,7 +239,6 @@ def getSuggestedChoices(rcnn_data, vgg_data, fei_caption_data, msr_caption_data,
 
 def naive_combine_models(video_name, selected_frames, _vgg_data, _msr_data, _rcnn_data):
     
-    words = {}
     tfs = []
     for fid, frame_name in enumerate(selected_frames):
         #print fid, '/', len(selected_frames)
@@ -258,7 +254,7 @@ def naive_combine_models(video_name, selected_frames, _vgg_data, _msr_data, _rcn
             for rcnn_idx, pred in enumerate(rcnn_data[0]['pred']['text']):
 
                 ## the confidence is higher than 10^(-3) and is not background
-                if rcnn_data[0]['pred']['conf'][rcnn_idx] > 0.0005 and  pred.find('background') < 0:
+                if rcnn_data[0]['pred']['conf'][rcnn_idx] > 0.0005 and pred.find('background') < 0:
                     rcnn_ws += [pred]
  
         vgg_ws = []
@@ -272,6 +268,7 @@ def naive_combine_models(video_name, selected_frames, _vgg_data, _msr_data, _rcn
             ## process msr captioning
             msr_caption_ws = removeStopWordsFromWordlist(msr_data[0]['words']['text'])
         '''
+        words = {}
         for w in rcnn_ws:
             if w not in words:
                 words[w] = 1
@@ -296,14 +293,14 @@ def naive_combine_models(video_name, selected_frames, _vgg_data, _msr_data, _rcn
 
     return words, tfs
 
-def subsample_tf(video_name, selected_frames, tfs_dict):
+def subsample_tf_dict(video_name, selected_frames, all_tf_dict):
    
     tfs = []
     for fid, frame_name in enumerate(selected_frames):
         #print fid, '/', len(selected_frames)
         frame_id = int(frame_name.split('.')[0])
         
-        tf = filter(lambda x: int(x['frame_name'].split('.')[0]) == frame_id, tfs_dict)
+        tf = filter(lambda x: int(x['frame_name'].split('.')[0]) == frame_id, all_tf_dict)
         tfs += [tf[0]]  
 
     return tfs
@@ -314,11 +311,11 @@ if __name__ == "__main__":
     videos = open(VIDEO_LIST).read().split()
 
     for video_name in videos:
-        print video_name
         
         if not os.path.exists(os.path.join('/mnt/tags/rcnn-info-all', video_name + '_rcnnrecog.json')) or not os.path.exists(os.path.join('/mnt/tags/vgg-classify-all', video_name + '_recog.json')) or not os.path.exists(os.path.join('/mnt/tags/msr-caption-all', video_name + '_msrcap.json')):
             continue
       
+        print video_name
         #or not os.path.exists(os.path.join('/mnt/tags/fei-caption-all', video_name)) 
         # load tags 
         _vgg_data = load_video_recog('/mnt/tags/vgg-classify-all', video_name)
@@ -328,20 +325,16 @@ if __name__ == "__main__":
         
         # compose video term freq (a list of dicts)
         frame_names = os.listdir(os.path.join('/mnt/frames', video_name))
-        frame_names = sorted(frame_names, key= lambda x: int(x.split('.')[0]))
-        print 'start getting tfs for all frames'
-        all_words, all_tfs = naive_combine_models(video_name, frame_names, _vgg_data, _msr_cap_data, _rcnn_data) 
-        print 'Done loading tfs for all frames'
+        frame_names = sorted(frame_names, key= lambda x: int(x.split('.')[0]))[:300]
+        all_words, all_tfs_dict = naive_combine_models(video_name, frame_names, _vgg_data, _msr_cap_data, _rcnn_data) 
         
         # uniformly subsample frames 
         FRAME_RETAIN_RATE = 10/100. 
         #for frame_rate in [0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6]:
-        for frame_rate in [0.1]:
-            retained_frames = naive_subsample_frames(video_name, frame_rate)
-            print 'Done loading tfs for subsampled frames'
-            subsampled_tfs = subsample_tf(video_name, retained_frames, all_tfs) 
-       
+        for retained_frame_rate in [0.1]:
+            retained_frames = naive_subsample_frames(frame_names, retained_frame_rate)
+            subsampled_tfs_dict = subsample_tf_dict(video_name, retained_frames, all_tfs_dict) 
         
-            print frame_rate, detailed_measure(all_tfs, subsampled_tfs)
-            hist_measure(all_tfs, subsampled_tfs) 
+            print retained_frame_rate, detailed_measure(all_tfs_dict, subsampled_tfs_dict)
+            hist_measure(all_tfs_dict, subsampled_tfs_dict) 
         break 
