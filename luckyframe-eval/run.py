@@ -339,7 +339,7 @@ if __name__ == "__main__":
         for frame_rate in [0.1]:
             retained_frames = naive_subsample_frames(video_name, frame_rate)
             print 'Done loading tfs for subsampled frames'
-            subsampled_tfs = subsample_tf(video_name, retained_frames, tfs) 
+            subsampled_tfs = subsample_tf(video_name, retained_frames, all_tfs) 
        
         
             print frame_rate, detailed_measure(all_tfs, subsampled_tfs)
