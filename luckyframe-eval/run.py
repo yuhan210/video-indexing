@@ -103,14 +103,11 @@ def detailed_measure(all_tfs_dict, subsampled_tfs_dict):
     return len(subsampled_tf)/(len(all_tf) * 1.0)
     
 
-def hist_correl(a_hist, b_hist): # incorrect
+def L1_dist(a_hist, b_hist): # incorrect
 
-    nomi = np.inner(a_hist, b_hist) 
-    aa_hist = np.power(a_hist, 2)
-    bb_hist = np.power(b_hist, 2)
-    deno = math.sqrt(np.inner(aa_hist, bb_hist))
+    assert(a_hist.shape == b_hist.shape)
+    return np.linalg.norm((a_hist-b_hist), ord = 1)/( a_hist.shape[0] * .01)
 
-    return nomi/deno
 
 def hist_measure(all_tfs_dict, subsampled_tfs_dict):
     '''
@@ -143,6 +140,7 @@ def hist_measure(all_tfs_dict, subsampled_tfs_dict):
      
     print 'Correlation (higher-> more similar) :', cv2.compareHist(all_hist_cv, sub_hist_cv, cv2.cv.CV_COMP_CORREL)
     print 'Chi-square (higher-> more similar) :', cv2.compareHist(all_hist_cv, sub_hist_cv, cv2.cv.CV_COMP_CHISQR)
+    print 'L1 distance:', L1_dist(all_array, sub_array)
     plt.subplot(2,1,1)
     plt.plot(range(len(all_hist)), all_array, 'o-r') 
     plt.plot(range(len(sub_hist)), sub_array, 'x-b') 
@@ -154,6 +152,7 @@ def hist_measure(all_tfs_dict, subsampled_tfs_dict):
     plt.xlabel('Subsampled Word Count (#)')
     plt.ylabel('Word Count (#)')
     plt.show()
+
 
 #def time_dist_measure():
 '''
@@ -325,6 +324,7 @@ def naive_combine_models(video_name, selected_frames, _vgg_data, _msr_data, _rcn
 
     return words, tfs
 
+
 def subsample_tf_dict(video_name, selected_frames, all_tf_dict):
    
     tfs = []
@@ -357,7 +357,7 @@ if __name__ == "__main__":
         
         # compose video term freq (a list of dicts)
         frame_names = os.listdir(os.path.join('/mnt/frames', video_name))
-        frame_names = sorted(frame_names, key= lambda x: int(x.split('.')[0]))
+        frame_names = sorted(frame_names, key= lambda x: int(x.split('.')[0]))[:200]
         all_words, all_tfs_dict = naive_combine_models(video_name, frame_names, _vgg_data, _msr_cap_data, _rcnn_data) 
         
         # uniformly subsample frames 
