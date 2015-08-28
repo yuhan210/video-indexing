@@ -296,15 +296,15 @@ def naive_combine_models(video_name, selected_frames, _vgg_data, _msr_data, _rcn
 
     return words, tfs
 
-def subsample_tf(video_name, selected_frames, tfs):
+def subsample_tf(video_name, selected_frames, tfs_dict):
    
     tfs = []
     for fid, frame_name in enumerate(selected_frames):
         #print fid, '/', len(selected_frames)
         frame_id = int(frame_name.split('.')[0])
         
-        tf = filter(lambda x: int(x['frame_name'].split('.')[0]) == frame_id, tfs)
-        tfs += [tf]  
+        tf = filter(lambda x: int(x['frame_name'].split('.')[0]) == frame_id, tfs_dict)
+        tfs += [tf[0]]  
 
     return tfs
 
