@@ -1,5 +1,7 @@
 from nltk.corpus import stopwords
+import numpy as np
 import operator
+import math
 import time
 import sys
 TOOL_PATH = '/home/t-yuche/clustering/tools'
@@ -11,6 +13,7 @@ try:
     plt.style.use('ggplot')
 except:
     pass
+import cv2
 
 STOPWORDS = ['inside', 'near', 'two', 'day', 'front', u'i', u'me', u'my', u'myself', u'we', u'our', u'ours', u'ourselves', u'you', u'your', u'yours', u'yourself', u'yourselves', u'he', u'him', u'his', u'himself', u'she', u'her', u'hers', u'herself', u'it', u'its', u'itself', u'they', u'them', u'their', u'theirs', u'themselves', u'what', u'which', u'who', u'whom', u'this', u'that', u'these', u'those', u'am', u'is', u'are', u'was', u'were', u'be', u'been', u'being', u'have', u'has', u'had', u'having', u'do', u'does', u'did', u'doing', u'a', u'an', u'the', u'and', u'but', u'if', u'or', u'because', u'as', u'until', u'while', u'of', u'at', u'by', u'for', u'with', u'about', u'against', u'between', u'into', u'through', u'during', u'before', u'after', u'above', u'below', u'to', u'from', u'up', u'down', u'in', u'out', u'on', u'off', u'over', u'under', u'again', u'further', u'then', u'once', u'here', u'there', u'when', u'where', u'why', u'how', u'all', u'any', u'both', u'each', u'few', u'more', u'most', u'other', u'some', u'such', u'no', u'nor', u'not', u'only', u'own', u'same', u'so', u'than', u'too', u'very', u's', u't', u'can', u'will', u'just', u'don', u'should', u'now']
 
@@ -100,6 +103,15 @@ def detailed_measure(all_tfs_dict, subsampled_tfs_dict):
     return len(subsampled_tf)/(len(all_tf) * 1.0)
     
 
+def hist_correl(a_hist, b_hist): # incorrect
+
+    nomi = np.inner(a_hist, b_hist) 
+    aa_hist = np.power(a_hist, 2)
+    bb_hist = np.power(b_hist, 2)
+    deno = math.sqrt(np.inner(aa_hist, bb_hist))
+
+    return nomi/deno
+
 def hist_measure(all_tfs_dict, subsampled_tfs_dict):
     '''
     similarity of the word distribution
@@ -119,8 +131,28 @@ def hist_measure(all_tfs_dict, subsampled_tfs_dict):
 
     all_hist = [x[1] for x in sorted_all_tf]
 
-    plt.plot(range(len(all_hist)), all_hist, 'o-r') 
-    plt.plot(range(len(all_hist)), sub_hist, 'x-b') 
+
+    # correlation
+    all_array = np.array(all_hist)
+    sub_array = np.array(sub_hist)
+    all_array = all_array / (np.sum(all_array) * 1.0)
+    sub_array = sub_array / (np.sum(sub_array) * 1.0)
+  
+    all_hist_cv = all_array.ravel().astype('float32') 
+    sub_hist_cv = sub_array.ravel().astype('float32') 
+     
+    print 'Correlation (higher-> more similar) :', cv2.compareHist(all_hist_cv, sub_hist_cv, cv2.cv.CV_COMP_CORREL)
+    print 'Chi-square (higher-> more similar) :', cv2.compareHist(all_hist_cv, sub_hist_cv, cv2.cv.CV_COMP_CHISQR)
+    plt.subplot(2,1,1)
+    plt.plot(range(len(all_hist)), all_array, 'o-r') 
+    plt.plot(range(len(sub_hist)), sub_array, 'x-b') 
+    plt.xlabel('Word Index')
+    plt.ylabel('Word Count (#)')
+
+    plt.subplot(2,1,2)
+    plt.plot(sub_hist, all_hist, 'o')
+    plt.xlabel('Subsampled Word Count (#)')
+    plt.ylabel('Word Count (#)')
     plt.show()
 
 #def time_dist_measure():
@@ -325,13 +357,13 @@ if __name__ == "__main__":
         
         # compose video term freq (a list of dicts)
         frame_names = os.listdir(os.path.join('/mnt/frames', video_name))
-        frame_names = sorted(frame_names, key= lambda x: int(x.split('.')[0]))[:300]
+        frame_names = sorted(frame_names, key= lambda x: int(x.split('.')[0]))
         all_words, all_tfs_dict = naive_combine_models(video_name, frame_names, _vgg_data, _msr_cap_data, _rcnn_data) 
         
         # uniformly subsample frames 
         FRAME_RETAIN_RATE = 10/100. 
         #for frame_rate in [0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6]:
-        for retained_frame_rate in [0.1]:
+        for retained_frame_rate in [0.01, 0.05, 0.1, 0.2, 0.5]:
             retained_frames = naive_subsample_frames(frame_names, retained_frame_rate)
             subsampled_tfs_dict = subsample_tf_dict(video_name, retained_frames, all_tfs_dict) 
         
