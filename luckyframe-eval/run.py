@@ -368,5 +368,8 @@ if __name__ == "__main__":
             subsampled_tfs_dict = subsample_tf_dict(video_name, retained_frames, all_tfs_dict) 
         
             print retained_frame_rate, detailed_measure(all_tfs_dict, subsampled_tfs_dict)
-            hist_measure(all_tfs_dict, subsampled_tfs_dict) 
+            hist_measure(all_tfs_dict, subsampled_tfs_dict)
+    
+        # frame diff (scene changes)
+        
         break 
