@@ -28,6 +28,13 @@ def removeStopWordsFromWordlist(list_ws):
     return ws
 
 
+def removeStopWords(list_str):
+    ws = []
+    for s in list_str:
+       ws.extend( [w for w in s.split(' ') if w not in stopwords.words('english') and w.find('background') < 0  and w not in STOPWORDS] )
+
+    return ws
+
 def getwnid(w):
 
     with open('synset_words.txt') as f:
@@ -38,6 +45,7 @@ def getwnid(w):
             if name == w:
                 return wnid
 
+'''
 def uniform_subsample(video_name, DROP_FRAME_PERCENTAGE):
     
     if DROP_FRAME_PERCENTAGE % 5 != 0:
@@ -63,10 +71,9 @@ def uniform_subsample(video_name, DROP_FRAME_PERCENTAGE):
         retained_frames += [frame_name]
 
     return retained_frames
-
+'''
 
 def naive_subsample_frames(all_frames, FRAME_RETAIN_RATE):
-
 
     n_picked_frames = len(all_frames) * FRAME_RETAIN_RATE
     step = n_picked_frames/((len(all_frames) ) * 1.0)
@@ -94,40 +101,34 @@ def get_combined_tfs(tfs_dict):
 
     return combined_tfs
 
-def detailed_measure(all_tfs_dict, subsampled_tfs_dict): 
+def detailed_measure(all_tf, subsampled_tf): 
     '''
     # of subsampled words/# of all words
     '''
-    all_tf = get_combined_tfs(all_tfs_dict) 
-    subsampled_tf = get_combined_tfs(subsampled_tfs_dict)
     return len(subsampled_tf)/(len(all_tf) * 1.0)
     
 
 def L1_dist(a_hist, b_hist): # incorrect
 
     assert(a_hist.shape == b_hist.shape)
-    return np.linalg.norm((a_hist-b_hist), ord = 1)/( a_hist.shape[0] * .01)
+    return np.linalg.norm((a_hist-b_hist), ord = 1)/(a_hist.shape[0] * .01)
 
 
-def hist_measure(all_tfs_dict, subsampled_tfs_dict):
+def hist_measure(all_tf, subsampled_tf):
     '''
     similarity of the word distribution
     '''
-    all_tf = get_combined_tfs(all_tfs_dict)
-    subsampled_tf = get_combined_tfs(subsampled_tfs_dict)
-
-    sorted_all_tf = sorted(all_tf.items(), key=operator.itemgetter(1))
-
+    sorted_all_tf = sorted(all_tf.items(), key=operator.itemgetter(1)) # becomes tuple
+ 
     # create subsampled histogram
     sub_hist = []
+    all_hist = []
     for item in sorted_all_tf:
+        all_hist += [item[1]]
         if item[0] in subsampled_tf:
             sub_hist += [subsampled_tf[item[0]]]
         else:
             sub_hist += [0]
-
-    all_hist = [x[1] for x in sorted_all_tf]
-
 
     # correlation
     all_array = np.array(all_hist)
@@ -141,22 +142,22 @@ def hist_measure(all_tfs_dict, subsampled_tfs_dict):
     print 'Correlation (higher-> more similar) :', cv2.compareHist(all_hist_cv, sub_hist_cv, cv2.cv.CV_COMP_CORREL)
     print 'Chi-square (higher-> more similar) :', cv2.compareHist(all_hist_cv, sub_hist_cv, cv2.cv.CV_COMP_CHISQR)
     print 'L1 distance:', L1_dist(all_array, sub_array)
-    plt.subplot(2,1,1)
-    plt.plot(range(len(all_hist)), all_array, 'o-r') 
-    plt.plot(range(len(sub_hist)), sub_array, 'x-b') 
+    ax = plt.subplot(2,1,1)
+    plt.plot(range(len(all_hist)), all_array, 'o-r', label = 'Nonsubsampled') 
+    plt.plot(range(len(sub_hist)), sub_array, 'x-b', label = 'Subsampled') 
+    plt.plit(range(len(all_hist)), all_array - sub_array, 'o-k', label= 'L1 dist')
+    plt.legend()
     plt.xlabel('Word Index')
     plt.ylabel('Word Count (#)')
-
-    plt.subplot(2,1,2)
+    ax.set_title('Histogram')
+    
+    ax = plt.subplot(2,1,2)
     plt.plot(sub_hist, all_hist, 'o')
     plt.xlabel('Subsampled Word Count (#)')
-    plt.ylabel('Word Count (#)')
+    plt.ylabel('Nonsubsampled Word Count (#)')
+    ax.set_title('Correlation')
     plt.show()
 
-
-#def time_dist_measure():
-'''
-'''
 
     
 def composeVGGWordnet(w, wordnet_tree_path = 'new_synset_word.txt'):
@@ -194,111 +195,47 @@ def composeVGGWordnet(w, wordnet_tree_path = 'new_synset_word.txt'):
     return '->'.join(output_w)
      
 
-def getSuggestedChoices(rcnn_data, vgg_data, fei_caption_data, msr_caption_data, frame_name):
+#def weighted_combine_models(video_name, selected_frames, _vgg_data, _msr_data, _rcnn_data, _fei_data):
 
-    start_idx = int(frame_name.split('.')[0])
+def combine_all_models(video_name, _vgg_data, _msr_data, _rcnn_data, _fei_data):
 
-    rcnn_data = filter(lambda x: int(x['image_path'].split('/')[-1].split('.')[0]) == start_idx, rcnn_data) 
-    vgg_data = filter(lambda x: int(x['img_path'].split('/')[-1].split('.')[0]) == start_idx, vgg_data) 
-    fei_caption_data = filter(lambda x: int(x['img_path'].split('/')[-1].split('.')[0]) == start_idx, fei_caption_data) 
-    msr_caption_data = filter(lambda x: int(x['img_path'].split('/')[-1].split('.')[0]) == start_idx, msr_caption_data) 
- 
-    labels = []
-    idx = 0
-    
-    ## process fast-rcnn
-    rcnn_ws = []
-    if len(rcnn_data) > 0:
-        for rcnn_idx, pred in enumerate(rcnn_data[idx]['pred']['text']):
+    tf_list = []
+    assert(len(_vgg_data) == len(_msr_data))
+    assert(len(_rcnn_data) == len(_fei_data))
+    assert(len(_vgg_data) == len(_fei_data))
 
-            ## the confidence is higher than 10^(-3) and is not background
-            if rcnn_data[idx]['pred']['conf'][rcnn_idx] > 0.0005 and  pred.find('background') < 0:
-                rcnn_ws += [pred]
+    for fid in xrange(len(_vgg_data)):
 
-    vgg_ws = []
-    if len(vgg_data) > 0:        
-        ## process vgg
-        vgg_ws = [w for w in vgg_data[idx]['pred']['text']]
+        rcnn_data = _rcnn_data[fid]
+        vgg_data = _vgg_data[fid]
+        msr_data = _msr_data[fid]
+        fei_data = _fei_data[fid]
    
- 
-    fei_caption_ws = [] 
-    if len(fei_caption_data) > 0:
-        ## process neuraltalk
-        fei_caption_ws = removeStopWords(fei_caption_data[idx]['candidate']['text'])
+        frame_name = rcnn_data['image_path'].split('/')[-1]
+        assert(rcnn_data['image_path'] == vgg_data['img_path'])
+        assert(rcnn_data['image_path'] == msr_data['img_path'])
+        assert(rcnn_data['image_path'] == fei_data['img_path'])
 
-
-    msr_caption_ws = [] 
-    if len(msr_caption_data) > 0:
-        ## process msr captioning
-        msr_caption_ws = removeStopWordsFromWordlist(msr_caption_data[idx]['words']['text'])
-
-
-    words = {}
-    for w in rcnn_ws:
-        if w not in words:
-            words[w] = 4
-        else:
-            words[w] += 4
-
-    for w in vgg_ws:
-    # compose vgg word
-        w = composeVGGWordnet(w)
-        if w not in words:
-            words[w] = 4
-        else:
-            words[w] += 4
-
-    for w in fei_caption_ws:
-        if w not in words:
-            words[w] = 1
-        else:
-            words[w] += 1
-    
-    for w_idx, w in enumerate(msr_caption_data[idx]['words']['text']):
-        score = float(msr_caption_data[idx]['words']['prob'][w_idx])
-        if w not in STOPWORDS and w.find('background') < 0:
-            if w not in words:
-                words[w] = max(1, 5 + score)
-            else:
-                words[w] += max(1, 5 + score)
-
-
-    words = sorted(words.items(), key=lambda x: x[1], reverse=True)    
-    labels = [x for x in words]
-    return labels 
-    
-
-def naive_combine_models(video_name, selected_frames, _vgg_data, _msr_data, _rcnn_data):
-    
-    tfs = []
-    for fid, frame_name in enumerate(selected_frames):
-        #print fid, '/', len(selected_frames)
-        frame_id = int(frame_name.split('.')[0])
-        
-        rcnn_data = filter(lambda x: int(x['image_path'].split('/')[-1].split('.')[0]) == frame_id, _rcnn_data)
-        vgg_data = filter(lambda x: int(x['img_path'].split('/')[-1].split('.')[0]) == frame_id, _vgg_data)
-        msr_data = filter(lambda x: int(x['img_path'].split('/')[-1].split('.')[0]) == frame_id, _msr_data)
-        
         # combine words
         rcnn_ws = []
         if len(rcnn_data) > 0:
-            for rcnn_idx, pred in enumerate(rcnn_data[0]['pred']['text']):
-
+            for rcnn_idx, pred in enumerate(rcnn_data['pred']['text']):
                 ## the confidence is higher than 10^(-3) and is not background
-                if rcnn_data[0]['pred']['conf'][rcnn_idx] > 0.0005 and pred.find('background') < 0:
+                if rcnn_data['pred']['conf'][rcnn_idx] > 0.0005 and pred.find('background') < 0:
                     rcnn_ws += [pred]
  
         vgg_ws = []
         if len(vgg_data) > 0:        
-            ## process vgg
-            vgg_ws = [w for w in vgg_data[0]['pred']['text']]
-
-        '''
-        msr_caption_ws = [] 
+            vgg_ws = [w for w in vgg_data['pred']['text']]
+    
+        fei_ws = [] 
+        if len(fei_data) > 0:
+            fei_ws = removeStopWords(fei_data['candidate']['text'])
+    
+        msr_ws = [] 
         if len(msr_data) > 0:
-            ## process msr captioning
-            msr_caption_ws = removeStopWordsFromWordlist(msr_data[0]['words']['text'])
-        '''
+            msr_ws = removeStopWordsFromWordlist(msr_data['words']['text'])
+
         words = {}
         for w in rcnn_ws:
             if w not in words:
@@ -313,63 +250,82 @@ def naive_combine_models(video_name, selected_frames, _vgg_data, _msr_data, _rcn
             else:
                 words[w] += 1
         
-        for w_idx, w in enumerate(msr_data[0]['words']['text']):
-            #score = float(msr_data[0]['words']['prob'][w_idx])
+        for w in fei_ws:
+            if w not in words:
+                words[w] = 1
+            else:
+                words[w] += 1
+    
+        for w_idx, w in enumerate(msr_data['words']['text']):
             if w not in STOPWORDS and w.find('background') < 0:
                 if w not in words:
                     words[w] = 1
                 else:
                     words[w] += 1
-        tfs += [{'frame_name': frame_name, 'tf': words}]
 
-    return words, tfs
+        tf_list += [{'frame_name': frame_name, 'tf': words}]
 
+    return tf_list
 
-def subsample_tf_dict(video_name, selected_frames, all_tf_dict):
+   
+
+def subsample_tf_list(selected_frames, all_tf_list):
    
     tfs = []
     for fid, frame_name in enumerate(selected_frames):
         #print fid, '/', len(selected_frames)
         frame_id = int(frame_name.split('.')[0])
         
-        tf = filter(lambda x: int(x['frame_name'].split('.')[0]) == frame_id, all_tf_dict)
+        tf = filter(lambda x: int(x['frame_name'].split('.')[0]) == frame_id, all_tf_list)
         tfs += [tf[0]]  
 
     return tfs
 
+#def hist_timely_measure():
+
+
+#def top_word_timely_measure():
+
+
+
 if __name__ == "__main__":
    
-    VIDEO_LIST = '/mnt/video_list.txt'
+    VIDEO_LIST = '/mnt/test_video.txt'
     videos = open(VIDEO_LIST).read().split()
 
     for video_name in videos:
         
-        if not os.path.exists(os.path.join('/mnt/tags/rcnn-info-all', video_name + '_rcnnrecog.json')) or not os.path.exists(os.path.join('/mnt/tags/vgg-classify-all', video_name + '_recog.json')) or not os.path.exists(os.path.join('/mnt/tags/msr-caption-all', video_name + '_msrcap.json')):
+        if not os.path.exists(os.path.join('/mnt/tags/rcnn-info-all', video_name + '_rcnnrecog.json')) or not os.path.exists(os.path.join('/mnt/tags/vgg-classify-all', video_name + '_recog.json')) or not os.path.exists(os.path.join('/mnt/tags/msr-caption-all', video_name + '_msrcap.json')) or not os.path.exists(os.path.join('/mnt/tags/fei-caption-all', video_name + '_5_caption.json')):
             continue
       
         print video_name
-        #or not os.path.exists(os.path.join('/mnt/tags/fei-caption-all', video_name)) 
-        # load tags 
+        
+        # load tags from all DNN modules 
         _vgg_data = load_video_recog('/mnt/tags/vgg-classify-all', video_name)
-        #_fei_caption_data = load_video_caption('/mnt/tags/fei-caption-all', video_name)
+        _fei_caption_data = load_video_caption('/mnt/tags/fei-caption-all', video_name)
         _msr_cap_data = load_video_msr_caption('/mnt/tags/msr-caption-all', video_name)
         _rcnn_data = load_video_rcnn('/mnt/tags/rcnn-info-all', video_name)
-        
+      
+ 
         # compose video term freq (a list of dicts)
         frame_names = os.listdir(os.path.join('/mnt/frames', video_name))
-        frame_names = sorted(frame_names, key= lambda x: int(x.split('.')[0]))[:200]
-        all_words, all_tfs_dict = naive_combine_models(video_name, frame_names, _vgg_data, _msr_cap_data, _rcnn_data) 
-        
+        frame_names = sorted(frame_names, key= lambda x: int(x.split('.')[0]))
+        all_tfs_list = combine_all_models(video_name, _vgg_data, _msr_cap_data, _rcnn_data, _fei_caption_data)
+        all_tf = get_combined_tfs(tf_list)
+ 
         # uniformly subsample frames 
         FRAME_RETAIN_RATE = 10/100. 
         #for frame_rate in [0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6]:
         for retained_frame_rate in [0.01, 0.05, 0.1, 0.2, 0.5]:
             retained_frames = naive_subsample_frames(frame_names, retained_frame_rate)
-            subsampled_tfs_dict = subsample_tf_dict(video_name, retained_frames, all_tfs_dict) 
-        
-            print retained_frame_rate, detailed_measure(all_tfs_dict, subsampled_tfs_dict)
-            hist_measure(all_tfs_dict, subsampled_tfs_dict)
-    
+            subsampled_tfs_list = subsample_tf_list(retained_frames, all_tfs_list) 
+            subsampled_tf = get_combined_tfs(subsampled_tfs_list)
+
+            print retained_frame_rate, detailed_measure(all_tf, subsampled_tf)
+            hist_measure(all_tf, subsampled_tf)
+   
+           # hist_timely_measure()
+           # top_word_timely_measure()
         # frame diff (scene changes)
         
         break 
