@@ -1,4 +1,4 @@
-1. # of detected words/# of all distinct words
-2. distribution distance (L1 distance)
-3. every 5 secs, compute distribution distance (use past history if no frames were selected)
-4. the time from the appearance for the top-k words
+1. # of detected words/# of all distinct words -- detailed_measure
+2. distribution distance (L1 distance) -- hist_measure
+3. every 5 secs, compute distribution distance (use past history if no frames were selected) -- hist_timely_measure
+4. the time from the appearance for the top-k words -- top_word_timely_measure
