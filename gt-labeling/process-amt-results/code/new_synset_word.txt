@@ -1,0 +1,1 @@
+/home/t-yuche/frame-analysis/exploit-cvmodules/wordnet/new_synset_word.txt
