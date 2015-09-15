@@ -87,7 +87,7 @@ def naive_subsample_frames(all_frames, FRAME_RETAIN_RATE):
         track += step
 
     return retained_frames
-
+'''
 
 def get_combined_tfs(tfs_dict):
 
@@ -281,8 +281,65 @@ def subsample_tf_list(selected_frames, all_tf_list):
 
     return tfs
 
-#def hist_timely_measure():
+def hist_timely_measure(all_tfs_list, subsampled_tfs_list, t = 5):
+    '''
+    Check hist distance every t secs 
+    '''
+    chunk_size = t * 30    
+    chunk_num = 1
+    nonsubsampled_idx = 0 
+    subsampled_idx = 0 
+    
+    nonsub_chunk = {}
+    sub_chunk = {}
+    timely_dist = {}
+    while nonsubsampled_idx < len(all_tfs_list) or subsampled_idx < len(subsampled_tfs_list):
 
+        nonsub_cur_fid = int(all_tfs_list[nonsubsampled_idx]['frame_name'].split('.')[0])
+        sub_cur_fid = int(subsampled_tfs_list[subsampled_idx]['frame_name'].split('.')[0])
+
+        if nonsub_cur_fid < chunk_num * chunk_size and nonsub_cur_fid >= (chunk_num - 1) * chunk_size:
+            for w in all_tfs_list[nonsubsampled_idx]['tf']:
+                if w not in nonsub_chunk:
+                    nonsub_chunk[w] = 1
+                else:
+                    nonsub_chunk[w] += 1
+            nonsubsampled_idx += 1 
+        
+        if sub_cur_fid < chunk_num * chunk_size and sub_cur_fid >= (chunk_num - 1) * chunk_size:
+            for w in subsampled_tfs_list[subsampled_idx]['tf']:
+                if w not in sub_chunk:
+                    sub_chunk[w] = 1
+                else:
+                    sub_chunk[w] += 1
+       
+            subsampled_idx += 1
+             
+        if nonsub_cur_fid >= chunk_num * chunk_size and sub_cur_fid >= chunk_num * chunk_size:
+            # compute nonsub_chunk and sub_chunk dist
+            sorted_nonsub_tf = sorted(nonsub_chunk.items(), key=operator.itemgetter(1)) 
+            nonsub_hist = []
+            sub_hist = []
+            for item in sorted_nonsub_tf:
+                nonsub_hist += [item[1]]
+                if item[0] in sub_chunk:
+                    sub_hist += [sub_chunk[item[0]]]
+                else:
+                    sub_hist = [sub_chunk[item[0]]]
+
+            nonsub_array = np.array(nonsub_hist)
+            sub_array = np.array(sub_hist)
+            nonsub_array = nonsub_array / (np.sum(nonsub_array) * 1.0)
+            sub_array = sub_array / (np.sum(sub_array) * 1.0)
+            dist = L1_dist(nonsub_array, sub_array)
+            timely_dist[chunk_num] = dist
+
+            chunk_num += 1
+            nonsub_chunk = {}
+            sub_chunk = {}
+           
+    ave_dist = sum(map(lambda x:timely_dist[x], timely_dist))/(len(timely_dist) * 1.0)
+    return ave_dist, timely_dist 
 
 def top_word_timely_measure(k, all_tf, all_tfs_list, subsampled_tfs_list):
 
@@ -361,12 +418,12 @@ if __name__ == "__main__":
             subsampled_tf = get_combined_tfs(subsampled_tfs_list)
             print 'retained rate:', retained_frame_rate
             print '\nsubsampled distinct word/nonsubsampled:', detailed_measure(all_tf, subsampled_tf)
-            print '\nhist measure:\n', hist_measure(all_tf, subsampled_tf)
+            print '\nhist measure:\n'
+            hist_measure(all_tf, subsampled_tf)
 
             ave_dist, occur_dist = top_word_timely_measure(10, all_tf, all_tfs_list, subsampled_tfs_list)
             print '\ntop word timely measure:', ave_dist
-            #print '\ntimely hist measure:' hist_timely_measure()
-           # top_word_timely_measure()
+            print '\ntimely hist measure:' hist_timely_measure(all_tfs_list, subsampled_tfs_list)
         # frame diff (scene changes)
         
         break 
