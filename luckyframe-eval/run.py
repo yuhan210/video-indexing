@@ -36,7 +36,6 @@ def removeStopWords(list_str):
     return ws
 
 def getwnid(w):
-
     with open('synset_words.txt') as f:
         for l in f.readlines():
             wnid = l.strip().split(' ')[0]
@@ -45,33 +44,31 @@ def getwnid(w):
             if name == w:
                 return wnid
 
-'''
-def uniform_subsample(video_name, DROP_FRAME_PERCENTAGE):
-    
-    if DROP_FRAME_PERCENTAGE % 5 != 0:
-        print 'Drop frame percentage should be the multiple of 5 [Drop frame percentage =', DROP_FRAME_PERCENTAGE, ']'
-        return
-
-    dropped_frame = DROP_FRAME_PERCENTAGE/5
-    # location of the dropped frames
-    dropped_location = range(dropped_frame) 
-
-    # frame name should be sorted 
-    frame_names = os.listdir(os.path.join('/mnt/frames', video_name))
-    frame_names = sorted(frame_names, key= lambda x: int(x.split('.')[0]))
-
-    retained_frames = [] 
-    for idx, frame_name in enumerate(frame_names):
-    
-        if idx % 20 in dropped_location:
-            print 'drop', frame_name
-            continue 
-    
-        print 'retain', frame_name
-        retained_frames += [frame_name]
-
-    return retained_frames
-'''
+#def uniform_subsample(video_name, DROP_FRAME_PERCENTAGE):
+#    
+#    if DROP_FRAME_PERCENTAGE % 5 != 0:
+#        print 'Drop frame percentage should be the multiple of 5 [Drop frame percentage =', DROP_FRAME_PERCENTAGE, ']'
+#        return
+#
+#    dropped_frame = DROP_FRAME_PERCENTAGE/5
+#    # location of the dropped frames
+#    dropped_location = range(dropped_frame) 
+#
+#    # frame name should be sorted 
+#    frame_names = os.listdir(os.path.join('/mnt/frames', video_name))
+#    frame_names = sorted(frame_names, key= lambda x: int(x.split('.')[0]))
+#
+#    retained_frames = [] 
+#    for idx, frame_name in enumerate(frame_names):
+#    
+#        if idx % 20 in dropped_location:
+#            print 'drop', frame_name
+#            continue 
+#    
+#        print 'retain', frame_name
+#        retained_frames += [frame_name]
+#
+#    return retained_frames
 
 def naive_subsample_frames(all_frames, FRAME_RETAIN_RATE):
 
@@ -87,7 +84,6 @@ def naive_subsample_frames(all_frames, FRAME_RETAIN_RATE):
         track += step
 
     return retained_frames
-'''
 
 def get_combined_tfs(tfs_dict):
 
@@ -101,10 +97,10 @@ def get_combined_tfs(tfs_dict):
 
     return combined_tfs
 
+'''
+# of subsampled words/# of all words
+'''
 def detailed_measure(all_tf, subsampled_tf): 
-    '''
-    # of subsampled words/# of all words
-    '''
     return len(subsampled_tf)/(len(all_tf) * 1.0)
     
 
@@ -114,10 +110,10 @@ def L1_dist(a_hist, b_hist): # incorrect
     return np.linalg.norm((a_hist-b_hist), ord = 1)/(a_hist.shape[0] * .01)
 
 
+'''
+similarity of the word distribution
+'''
 def hist_measure(all_tf, subsampled_tf):
-    '''
-    similarity of the word distribution
-    '''
     sorted_all_tf = sorted(all_tf.items(), key=operator.itemgetter(1)) # becomes tuple
  
     # create subsampled histogram
@@ -423,7 +419,8 @@ if __name__ == "__main__":
 
             ave_dist, occur_dist = top_word_timely_measure(10, all_tf, all_tfs_list, subsampled_tfs_list)
             print '\ntop word timely measure:', ave_dist
-            print '\ntimely hist measure:' hist_timely_measure(all_tfs_list, subsampled_tfs_list)
+            ave_dist, timely_dist = hist_timely_measure(all_tfs_list, subsampled_tfs_list)
+            print '\ntimely hist measure:', ave_dist
         # frame diff (scene changes)
         
         break 
