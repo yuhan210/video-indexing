@@ -145,7 +145,7 @@ def hist_measure(all_tf, subsampled_tf):
     ax = plt.subplot(2,1,1)
     plt.plot(range(len(all_hist)), all_array, 'o-r', label = 'Nonsubsampled') 
     plt.plot(range(len(sub_hist)), sub_array, 'x-b', label = 'Subsampled') 
-    plt.plit(range(len(all_hist)), all_array - sub_array, 'o-k', label= 'L1 dist')
+    plt.plot(range(len(all_hist)), abs(all_array - sub_array), 'o-k', label= 'L1 dist')
     plt.legend()
     plt.xlabel('Word Index')
     plt.ylabel('Word Count (#)')
@@ -284,9 +284,48 @@ def subsample_tf_list(selected_frames, all_tf_list):
 #def hist_timely_measure():
 
 
-#def top_word_timely_measure():
+def top_word_timely_measure(k, all_tf, all_tfs_list, subsampled_tfs_list):
 
+    sorted_all_tf = sorted(all_tf.items(), key=operator.itemgetter(1)) # becomes tuple
+    top_k_w = [x[0] for x in sorted_all_tf[-(k+1):-1]]
 
+    # TODO:re-occurence of an object
+    # diff by frame
+    #print top_k_w
+    nonsubsampled_occur_time = {}
+    subsampled_occur_time = {}
+    
+    for keyword in top_k_w:
+        for d in all_tfs_list:
+            tf = d['tf']
+            frame_name = d['frame_name']
+            if keyword in tf:
+                nonsubsampled_occur_time[keyword] = int(frame_name.split('.')[0])
+                break
+
+    for keyword in top_k_w:
+        for idx, d in enumerate(subsampled_tfs_list):
+            tf = d['tf']  
+            frame_name = d['frame_name']
+            if keyword in tf:
+                subsampled_occur_time[keyword] = int(frame_name.split('.')[0])
+                break
+
+    #print nonsubsampled_occur_time
+    #print subsampled_occur_time
+
+    occur_dist = {} # in ms
+
+    # compute distance
+    ave_dist = 0.0
+    for keyword in top_k_w:
+        dist = (subsampled_occur_time[keyword] - nonsubsampled_occur_time[keyword]) * 33.33
+        occur_dist[keyword] = dist
+        ave_dist += dist
+
+    ave_dist /= len(top_k_w)
+    
+    return ave_dist, occur_dist 
 
 if __name__ == "__main__":
    
@@ -311,20 +350,22 @@ if __name__ == "__main__":
         frame_names = os.listdir(os.path.join('/mnt/frames', video_name))
         frame_names = sorted(frame_names, key= lambda x: int(x.split('.')[0]))
         all_tfs_list = combine_all_models(video_name, _vgg_data, _msr_cap_data, _rcnn_data, _fei_caption_data)
-        all_tf = get_combined_tfs(tf_list)
+        all_tf = get_combined_tfs(all_tfs_list)
  
         # uniformly subsample frames 
         FRAME_RETAIN_RATE = 10/100. 
         #for frame_rate in [0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6]:
-        for retained_frame_rate in [0.01, 0.05, 0.1, 0.2, 0.5]:
+        for retained_frame_rate in [0.01, 0.03, 0.05, 0.1, 0.2, 0.5]:
             retained_frames = naive_subsample_frames(frame_names, retained_frame_rate)
             subsampled_tfs_list = subsample_tf_list(retained_frames, all_tfs_list) 
             subsampled_tf = get_combined_tfs(subsampled_tfs_list)
+            print 'retained rate:', retained_frame_rate
+            print '\nsubsampled distinct word/nonsubsampled:', detailed_measure(all_tf, subsampled_tf)
+            print '\nhist measure:\n', hist_measure(all_tf, subsampled_tf)
 
-            print retained_frame_rate, detailed_measure(all_tf, subsampled_tf)
-            hist_measure(all_tf, subsampled_tf)
-   
-           # hist_timely_measure()
+            ave_dist, occur_dist = top_word_timely_measure(10, all_tf, all_tfs_list, subsampled_tfs_list)
+            print '\ntop word timely measure:', ave_dist
+            #print '\ntimely hist measure:' hist_timely_measure()
            # top_word_timely_measure()
         # frame diff (scene changes)
         
