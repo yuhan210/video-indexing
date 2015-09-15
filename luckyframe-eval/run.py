@@ -289,8 +289,12 @@ def hist_timely_measure(all_tfs_list, subsampled_tfs_list, t = 5):
     nonsub_chunk = {}
     sub_chunk = {}
     timely_dist = {}
-    while nonsubsampled_idx < len(all_tfs_list) or subsampled_idx < len(subsampled_tfs_list):
 
+    while True:
+        
+        if nonsubsampled_idx == len(all_tfs_list) - 1 and subsampled_idx == len(subsampled_tfs_list) -1:
+            break
+    
         nonsub_cur_fid = int(all_tfs_list[nonsubsampled_idx]['frame_name'].split('.')[0])
         sub_cur_fid = int(subsampled_tfs_list[subsampled_idx]['frame_name'].split('.')[0])
 
@@ -300,7 +304,8 @@ def hist_timely_measure(all_tfs_list, subsampled_tfs_list, t = 5):
                     nonsub_chunk[w] = 1
                 else:
                     nonsub_chunk[w] += 1
-            nonsubsampled_idx += 1 
+            if nonsubsampled_idx < len(all_tfs_list) - 1: 
+                nonsubsampled_idx += 1 
         
         if sub_cur_fid < chunk_num * chunk_size and sub_cur_fid >= (chunk_num - 1) * chunk_size:
             for w in subsampled_tfs_list[subsampled_idx]['tf']:
@@ -308,9 +313,9 @@ def hist_timely_measure(all_tfs_list, subsampled_tfs_list, t = 5):
                     sub_chunk[w] = 1
                 else:
                     sub_chunk[w] += 1
-       
-            subsampled_idx += 1
-             
+            if subsampled_idx < len(subsampled_tfs_list) - 1: 
+                subsampled_idx += 1
+         
         if nonsub_cur_fid >= chunk_num * chunk_size and sub_cur_fid >= chunk_num * chunk_size:
             # compute nonsub_chunk and sub_chunk dist
             sorted_nonsub_tf = sorted(nonsub_chunk.items(), key=operator.itemgetter(1)) 
