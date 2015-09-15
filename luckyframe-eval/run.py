@@ -318,6 +318,9 @@ def hist_timely_measure(all_tfs_list, subsampled_tfs_list, t = 5):
          
         if nonsub_cur_fid >= chunk_num * chunk_size and sub_cur_fid >= chunk_num * chunk_size:
             # compute nonsub_chunk and sub_chunk dist
+            if len(sub_chunk) == 0:
+                sub_chunk = prev_sub_chunk
+
             sorted_nonsub_tf = sorted(nonsub_chunk.items(), key=operator.itemgetter(1)) 
             nonsub_hist = []
             sub_hist = []
@@ -334,7 +337,8 @@ def hist_timely_measure(all_tfs_list, subsampled_tfs_list, t = 5):
             sub_array = sub_array / (np.sum(sub_array) * 1.0)
             dist = L1_dist(nonsub_array, sub_array)
             timely_dist[chunk_num] = dist
-
+            
+            prev_sub_chunk = sub_chunk
             chunk_num += 1
             nonsub_chunk = {}
             sub_chunk = {}
