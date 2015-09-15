@@ -18,6 +18,25 @@ def loadKeyFrames(video_name):
 
     return keyframe_filenames
 
+def load_all_labels(video_name):
+
+    rcnn_data = load_video_rcnn('/mnt/tags/rcnn-info-all', video_name)
+    vgg_data = load_video_recog('/mnt/tags/vgg-classify-keyframe', video_name)
+    fei_caption_data = load_video_caption('/mnt/tags/fei-caption-keyframe', video_name)
+    msr_cap_data = load_video_msr_caption('/mnt/tags/msr-caption-keyframe', video_name)
+
+    return rcnn_data, vgg_data, fei_caption_data, msr_cap_data 
+    
+
+def loadKeyFrameFilenames(video_name):
+
+    KEYFRAME_FOLDER = '/home/t-yuche/gt-labeling/frame-subsample/keyframe-info'
+    keyframe_file = os.path.join(KEYFRAME_FOLDER, video_name + '_uniform.json')
+
+    with open(keyframe_file) as json_file:
+        keyframes = json.load(json_file)['img_blobs']
+
+    return keyframes
 
 def load_suggested_labels(video_name, anno_folder="/home/t-yuche/gt-labeling/suggested-labels"):
 
@@ -32,6 +51,25 @@ def load_suggested_labels(video_name, anno_folder="/home/t-yuche/gt-labeling/sug
                      
     return ds
 
+
+
+def load_video_turker(turker_folder, video_name):
+    '''
+    Return a dict: 
+    key: frame_id (str)
+    value: a list of smaller lists(each list is a choice)
+    '''
+   
+    folder = os.path.join(turker_folder, video_name)
+    files = sorted(os.listdir(folder), key = lambda x: int(x.split('.')[0]))
+    ds = {}
+    for f in files:
+        f_path = os.path.join(folder, f)
+        with open(f_path) as json_file:
+            turker_data = json.load(json_file)
+            ds[f.split('.')[0] + '.jpg'] = turker_data['gt_labels'] 
+
+    return ds
 
 def load_turker_labels(amtresults_folder):
     
@@ -176,6 +214,7 @@ def load_video_recog(recog_folder, video_name):
     recog_data = sorted(recog_data['imgblobs'], key=lambda x: int(x['img_path'].split('/')[-1].split('.')[0]))
     
     return recog_data
+
 
 
 
