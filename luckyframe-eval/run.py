@@ -321,7 +321,7 @@ def hist_timely_measure(all_tfs_list, subsampled_tfs_list, t = 5):
                 if item[0] in sub_chunk:
                     sub_hist += [sub_chunk[item[0]]]
                 else:
-                    sub_hist = [sub_chunk[item[0]]]
+                    sub_hist += [0]
 
             nonsub_array = np.array(nonsub_hist)
             sub_array = np.array(sub_hist)
