@@ -301,11 +301,16 @@ if __name__ == "__main__":
     VIDEO_LIST = "/mnt/video_list.txt"
     videos = open(VIDEO_LIST).read().split()
     
+    error_fh = open('error.log', 'w')
     # fei, msr, rcnn, vgg 
     module_score = {'fei': 0, 'msr': 0, 'rcnn': 0, 'vgg': 0}
     for v in videos:
 
-        print v 
+        print v
+        if not os.path.exists(os.path.join('/mnt/turker-labels', v)):
+            error_fh.write(v + '\n')
+            continue
+
         ds = load_video_turker('/mnt/turker-labels', v)
         anno_folder = os.path.join('/mnt/labels-for-turkers', v)
 
@@ -348,10 +353,10 @@ if __name__ == "__main__":
     print module_score
     # normalize
     deno = module_score['fei'] + module_score['msr'] + module_score['rcnn'] + module_score['vgg']
-    print 'fei', module_score['fei']/(demo * 1.0)
-    print 'rcnn', module_score['rcnn']/(demo * 1.0)
-    print 'msr', module_score['msr']/(demo * 1.0)
-    print 'vgg', module_score['vgg']/(demo * 1.0)
+    print 'fei', module_score['fei']/(deno * 1.0)
+    print 'rcnn', module_score['rcnn']/(deno * 1.0)
+    print 'msr', module_score['msr']/(deno * 1.0)
+    print 'vgg', module_score['vgg']/(deno * 1.0)
 
          
-         
+    error_fh.close()     
