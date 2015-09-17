@@ -1,5 +1,7 @@
 from nltk.corpus import stopwords
+import scipy.spatial.distance
 import numpy as np
+import scipy
 import operator
 import math
 import time
@@ -70,6 +72,7 @@ def getwnid(w):
 #
 #    return retained_frames
 
+
 def naive_subsample_frames(all_frames, FRAME_RETAIN_RATE):
 
     n_picked_frames = len(all_frames) * FRAME_RETAIN_RATE
@@ -110,10 +113,13 @@ def L1_dist(a_hist, b_hist): # incorrect
     return np.linalg.norm((a_hist-b_hist), ord = 1)/(a_hist.shape[0] * .01)
 
 
+def cos_similarity(a_hist, b_hist):
+    return 1 - scipy.spatial.distance.cosine(a_hist, b_hist) 
+
 '''
 similarity of the word distribution
 '''
-def hist_measure(all_tf, subsampled_tf):
+def hist_measure(all_tf, subsampled_tf, plot_fig = True):
     sorted_all_tf = sorted(all_tf.items(), key=operator.itemgetter(1)) # becomes tuple
  
     # create subsampled histogram
@@ -135,26 +141,33 @@ def hist_measure(all_tf, subsampled_tf):
     all_hist_cv = all_array.ravel().astype('float32') 
     sub_hist_cv = sub_array.ravel().astype('float32') 
      
-    print 'Correlation (higher-> more similar) :', cv2.compareHist(all_hist_cv, sub_hist_cv, cv2.cv.CV_COMP_CORREL)
-    print 'Chi-square (higher-> more similar) :', cv2.compareHist(all_hist_cv, sub_hist_cv, cv2.cv.CV_COMP_CHISQR)
-    print 'L1 distance:', L1_dist(all_array, sub_array)
-    ax = plt.subplot(2,1,1)
-    plt.plot(range(len(all_hist)), all_array, 'o-r', label = 'Nonsubsampled') 
-    plt.plot(range(len(sub_hist)), sub_array, 'x-b', label = 'Subsampled') 
-    plt.plot(range(len(all_hist)), abs(all_array - sub_array), 'o-k', label= 'L1 dist')
-    plt.legend()
-    plt.xlabel('Word Index')
-    plt.ylabel('Word Count (#)')
-    ax.set_title('Histogram')
-    
-    ax = plt.subplot(2,1,2)
-    plt.plot(sub_hist, all_hist, 'o')
-    plt.xlabel('Subsampled Word Count (#)')
-    plt.ylabel('Nonsubsampled Word Count (#)')
-    ax.set_title('Correlation')
-    plt.show()
+    correlation_score =  cv2.compareHist(all_hist_cv, sub_hist_cv, cv2.cv.CV_COMP_CORREL)
+    chisq_dist = cv2.compareHist(all_hist_cv, sub_hist_cv, cv2.cv.CV_COMP_CHISQR)
+    l1_dist = L1_dist(all_array, sub_array)
+    cos_sim = cos_similarity(all_array, sub_array)
+    '''
+    print 'Correlation (higher-> similar) :', cv2.compareHist(all_hist_cv, sub_hist_cv, cv2.cv.CV_COMP_CORREL)
+    print 'Chi-square (smaller-> similar) :', cv2.compareHist(all_hist_cv, sub_hist_cv, cv2.cv.CV_COMP_CHISQR)
+    print 'L1 distance (smaller -> similar):', L1_dist(all_array, sub_array)
+    '''
+    if plot_fig:
+        ax = plt.subplot(2,1,1)
+        plt.plot(range(len(all_hist)), all_array, 'o-r', label = 'Nonsubsampled') 
+        plt.plot(range(len(sub_hist)), sub_array, 'x-b', label = 'Subsampled') 
+        plt.plot(range(len(all_hist)), abs(all_array - sub_array), 'o-k', label= 'L1 dist')
+        plt.legend()
+        plt.xlabel('Word Index')
+        plt.ylabel('Word Count (#)')
+        ax.set_title('Histogram')
+        
+        ax = plt.subplot(2,1,2)
+        plt.plot(sub_hist, all_hist, 'o')
+        plt.xlabel('Subsampled Word Count (#)')
+        plt.ylabel('Nonsubsampled Word Count (#)')
+        ax.set_title('Correlation')
+        plt.show()
 
-
+    return l1_dist, correlation_score, chisq_dist, cos_sim 
     
 def composeVGGWordnet(w, wordnet_tree_path = 'new_synset_word.txt'):
     
@@ -191,7 +204,75 @@ def composeVGGWordnet(w, wordnet_tree_path = 'new_synset_word.txt'):
     return '->'.join(output_w)
      
 
-#def weighted_combine_models(video_name, selected_frames, _vgg_data, _msr_data, _rcnn_data, _fei_data):
+def weighted_combine_models(video_name, selected_frames, _vgg_data, _msr_data, _rcnn_data, _fei_data):
+    
+    tf_list = []     
+    assert(len(_vgg_data) == len(_msr_data))
+    assert(len(_rcnn_data) == len(_fei_data))
+    assert(len(_vgg_data) == len(_fei_data))
+
+    for fid in xrange(len(_vgg_data)):
+
+        rcnn_data = _rcnn_data[fid]
+        vgg_data = _vgg_data[fid]
+        msr_data = _msr_data[fid]
+        fei_data = _fei_data[fid]
+        
+        frame_name = rcnn_data['image_path'].split('/')[-1]
+        assert(rcnn_data['image_path'] == vgg_data['img_path'])
+        assert(rcnn_data['image_path'] == msr_data['img_path'])
+        assert(rcnn_data['image_path'] == fei_data['img_path'])
+        
+        # combine words
+        rcnn_ws = []
+        if len(rcnn_data) > 0:
+            for rcnn_idx, pred in enumerate(rcnn_data['pred']['text']):
+                ## the confidence is higher than 10^(-3) and is not background
+                if rcnn_data['pred']['conf'][rcnn_idx] > 0.0005 and pred.find('background') < 0:
+                    rcnn_ws += [pred]
+ 
+        vgg_ws = []
+        if len(vgg_data) > 0:        
+            vgg_ws = [w for w in vgg_data['pred']['text']]
+    
+        fei_ws = [] 
+        if len(fei_data) > 0:
+            fei_ws = removeStopWords(fei_data['candidate']['text'])
+    
+        msr_ws = [] 
+        if len(msr_data) > 0:
+            msr_ws = removeStopWordsFromWordlist(msr_data['words']['text'])
+
+        words = {}
+        for w in rcnn_ws:
+            if w not in words:
+                words[w] = 2
+            else:
+                words[w] += 2
+        for w in vgg_ws:
+            w = composeVGGWordnet(w)
+            w = w.split('->')[-1] 
+            if w not in words:
+                words[w] = 2
+            else:
+                words[w] += 2
+        
+        for w in fei_ws:
+            if w not in words:
+                words[w] = 1
+            else:
+                words[w] += 1
+    
+        for w_idx, w in enumerate(msr_data['words']['text']):
+            if w not in STOPWORDS and w.find('background') < 0:
+                if w not in words:
+                    words[w] = max(1, 5 + score)
+                else:
+                    words[w] += max(1, 5 + score)
+
+        tf_list += [{'frame_name': frame_name, 'tf': words}]
+
+    return tf_list
 
 def combine_all_models(video_name, _vgg_data, _msr_data, _rcnn_data, _fei_data):
 
@@ -263,7 +344,6 @@ def combine_all_models(video_name, _vgg_data, _msr_data, _rcnn_data, _fei_data):
 
     return tf_list
 
-   
 
 def subsample_tf_list(selected_frames, all_tf_list):
    
@@ -389,11 +469,42 @@ def top_word_timely_measure(k, all_tf, all_tfs_list, subsampled_tfs_list):
     
     return ave_dist, occur_dist 
 
+
+def framediff_select(video_name, frame_names):
+
+    MOVEMENT_PERCENTAGE = 0.25
+    prev_framename = None
+    retained_frames = []
+
+    for frame_name in frame_names:
+        if prev_framename == None:
+            retained_frames += [frame_name]
+            prev_framename = frame_name
+            continue
+                
+        # load prev_frame and cur_frame
+        cur_frame = cv2.imread(os.path.join('/mnt/frames/', video_name, frame_name), 0)       
+        prev_frame = cv2.imread(os.path.join('/mnt/frames/', video_name, prev_framename), 0)
+
+        diff = cv2.absdiff(cur_frame, prev_frame)
+        #cv2.imshow('diff', diff)
+        ret, thresh = cv2.threshold(diff, 35, 255, cv2.THRESH_BINARY)
+        #cv2.imshow('thresh', thresh)
+        #cv2.waitKey(1000)
+        frame_diff = cv2.countNonZero(thresh)
+
+        if frame_diff >= (MOVEMENT_PERCENTAGE * cur_frame.shape[0] * cur_frame.shape[1]):
+            retained_frames += [frame_name]
+            prev_framename = frame_name
+
+    return retained_frames
+
 if __name__ == "__main__":
    
-    VIDEO_LIST = '/mnt/test_video.txt'
+    VIDEO_LIST = './small_video.txt'
     videos = open(VIDEO_LIST).read().split()
 
+    
     for video_name in videos:
         
         if not os.path.exists(os.path.join('/mnt/tags/rcnn-info-all', video_name + '_rcnnrecog.json')) or not os.path.exists(os.path.join('/mnt/tags/vgg-classify-all', video_name + '_recog.json')) or not os.path.exists(os.path.join('/mnt/tags/msr-caption-all', video_name + '_msrcap.json')) or not os.path.exists(os.path.join('/mnt/tags/fei-caption-all', video_name + '_5_caption.json')):
@@ -413,23 +524,47 @@ if __name__ == "__main__":
         frame_names = sorted(frame_names, key= lambda x: int(x.split('.')[0]))
         all_tfs_list = combine_all_models(video_name, _vgg_data, _msr_cap_data, _rcnn_data, _fei_caption_data)
         all_tf = get_combined_tfs(all_tfs_list)
+   
+        
+          
+        # frame difference
+        #framediff_retained_frames = framediff_select(video_name, frame_names) 
+        #framediff_tfs_list = subsample_tf_list(framediff_retained_frames, all_tfs_list) 
+        #framediff_tf = get_combined_tfs(framediff_tfs_list)
+        #print '-----------------FRAMEDIFF-------------------------'
+        #print '<retained rate>', len(framediff_retained_frames)/(len(frame_names) * 1.0) 
+        #print '1. # subsampled distinct word/nonsubsampled>', detailed_measure(all_tf, framediff_tf)
+        #l1_dist, correl_score, chisq_dist = hist_measure(all_tf, framediff_tf)
+        #print '2. hist measure'
+        #print '\t L1-dist (smaller -> similar)', l1_dist
+        #print '\t Correlation (smaller -> similar)', correl_score
+        #print '\t Chi-sq (bigger -> similar)', chisq_dist
+        k = 10
+        #ave_dist, occur_dist = top_word_timely_measure(k, all_tf, all_tfs_list, framediff_tfs_list)
+        #print '3. top', k, 'word timely measure (ms):', ave_dist
+        #ave_dist, timely_dist = hist_timely_measure(all_tfs_list, framediff_tfs_list)
+        #print '4. timely hist measure:', ave_dist
+          
  
         # uniformly subsample frames 
-        FRAME_RETAIN_RATE = 10/100. 
         #for frame_rate in [0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6]:
-        for retained_frame_rate in [0.01, 0.03, 0.05, 0.1, 0.2, 0.5]:
+        for retained_frame_rate in [0.01, 0.03, 0.05, 0.07, 0.1, 0.3, 0.5, 0.7]:
             retained_frames = naive_subsample_frames(frame_names, retained_frame_rate)
             subsampled_tfs_list = subsample_tf_list(retained_frames, all_tfs_list) 
             subsampled_tf = get_combined_tfs(subsampled_tfs_list)
-            print 'retained rate:', retained_frame_rate
-            print '\nsubsampled distinct word/nonsubsampled:', detailed_measure(all_tf, subsampled_tf)
-            print '\nhist measure:\n'
-            hist_measure(all_tf, subsampled_tf)
-
-            ave_dist, occur_dist = top_word_timely_measure(10, all_tf, all_tfs_list, subsampled_tfs_list)
-            print '\ntop word timely measure:', ave_dist
+            print '-----------------UNIFORM-------------------------'
+            print '<retained rate>', retained_frame_rate
+            print '1. # subsampled distinct word/nonsubsampled>', detailed_measure(all_tf, subsampled_tf)
+            l1_dist, correl_score, chisq_dist, cos_sim = hist_measure(all_tf, subsampled_tf)
+            print '2. hist measure'
+            print '\t L1-dist (smaller -> similar)', l1_dist
+            print '\t Correlation (smaller -> similar)', correl_score
+            print '\t Chi-sq (bigger -> similar)', chisq_dist
+            print '\t Cos-sim (bigger -> similar)', cos_sim
+            ave_dist, occur_dist = top_word_timely_measure(k, all_tf, all_tfs_list, subsampled_tfs_list)
+            print '3. top', k, 'word timely measure (ms):', ave_dist
             ave_dist, timely_dist = hist_timely_measure(all_tfs_list, subsampled_tfs_list)
-            print '\ntimely hist measure:', ave_dist
-        # frame diff (scene changes)
+            print '4. timely hist measure:', ave_dist
         
-        break 
+                     
+               
