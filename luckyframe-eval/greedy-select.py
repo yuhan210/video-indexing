@@ -114,7 +114,7 @@ def L1_dist(a_hist, b_hist): # incorrect
 '''
 similarity of the word distribution
 '''
-def hist_measure(all_tf, subsampled_tf, plot_fig = True):
+def hist_measure(all_tf, subsampled_tf, plot_fig = False):
     sorted_all_tf = sorted(all_tf.items(), key=operator.itemgetter(1)) # becomes tuple
  
     # create subsampled histogram
@@ -287,7 +287,14 @@ def hist_timely_measure(all_tfs_list, subsampled_tfs_list, t = 5):
     '''
     Check hist distance every t secs 
     '''
-    chunk_size = t * 30    
+
+    chunk_size = t * 30
+    
+    # check if there's at least one chunk
+    if len(all_tfs_list) < chunk_size or len(subsampled_tfs_list) < chunk_size:
+        return -1, -1 
+
+    
     chunk_num = 1
     nonsubsampled_idx = 0 
     subsampled_idx = 0 
@@ -295,37 +302,56 @@ def hist_timely_measure(all_tfs_list, subsampled_tfs_list, t = 5):
     nonsub_chunk = {}
     sub_chunk = {}
     timely_dist = {}
+    timely_corr = {}
 
     while True:
-        
-        if nonsubsampled_idx == len(all_tfs_list) - 1 and subsampled_idx == len(subsampled_tfs_list) -1:
+
+        #print 'nonsub id:', nonsubsampled_idx, ' subsampled_id:', subsampled_idx
+        if nonsubsampled_idx == len(all_tfs_list) and subsampled_idx == len(subsampled_tfs_list):
+            # Ending criteria
             break
     
         nonsub_cur_fid = int(all_tfs_list[nonsubsampled_idx]['frame_name'].split('.')[0])
-        sub_cur_fid = int(subsampled_tfs_list[subsampled_idx]['frame_name'].split('.')[0])
+
+        update_subchunk = True
+        if subsampled_idx < len(subsampled_tfs_list):
+            sub_cur_fid = int(subsampled_tfs_list[subsampled_idx]['frame_name'].split('.')[0])
+        else:
+            update_subchunk = False 
+
+        #print 'chunk region:', chunk_num * chunk_size
+        #print 'nonsub fid:', nonsub_cur_fid, ' subsampled_id:', sub_cur_fid
 
         if nonsub_cur_fid < chunk_num * chunk_size and nonsub_cur_fid >= (chunk_num - 1) * chunk_size:
+            #print 'update nonsubsampled idx'
             for w in all_tfs_list[nonsubsampled_idx]['tf']:
                 if w not in nonsub_chunk:
                     nonsub_chunk[w] = 1
                 else:
                     nonsub_chunk[w] += 1
-            if nonsubsampled_idx < len(all_tfs_list) - 1: 
-                nonsubsampled_idx += 1 
+            nonsubsampled_idx += 1 
         
-        if sub_cur_fid < chunk_num * chunk_size and sub_cur_fid >= (chunk_num - 1) * chunk_size:
+             
+        if update_subchunk and sub_cur_fid < chunk_num * chunk_size and sub_cur_fid >= (chunk_num - 1) * chunk_size:
+            #print 'update subsampled idx'
             for w in subsampled_tfs_list[subsampled_idx]['tf']:
                 if w not in sub_chunk:
                     sub_chunk[w] = 1
                 else:
                     sub_chunk[w] += 1
-            if subsampled_idx < len(subsampled_tfs_list) - 1: 
-                subsampled_idx += 1
-         
-        if nonsub_cur_fid >= chunk_num * chunk_size and sub_cur_fid >= chunk_num * chunk_size:
+            subsampled_idx += 1
+            
+        # process this chunk and advance to the next chunk 
+        # if no more fids or next fid both >= chunk_num * chunk_size
+        if ( nonsubsampled_idx == len(all_tfs_list) and subsampled_idx == len(subsampled_tfs_list) ) or (subsampled_idx != len(subsampled_tfs_list) and nonsubsampled_idx != len(all_tfs_list) and int(subsampled_tfs_list[subsampled_idx]['frame_name'].split('.')[0]) >= chunk_num * chunk_size and int (all_tfs_list[nonsubsampled_idx]['frame_name'].split('.')[0]) >= chunk_num * chunk_size) or (subsampled_idx == len(subsampled_tfs_list) and int(all_tfs_list[nonsubsampled_idx]['frame_name'].split('.')[0]) >= chunk_num * chunk_size): 
+ 
+       #if nonsubsampled_idx >= chunk_num * chunk_size and subsampled_idx >= chunk_num * chunk_size:
             # compute nonsub_chunk and sub_chunk dist
             if len(sub_chunk) == 0:
+                #print 'Using previous chunk'
                 sub_chunk = prev_sub_chunk
+
+            #print sub_chunk, nonsub_chunk
 
             sorted_nonsub_tf = sorted(nonsub_chunk.items(), key=operator.itemgetter(1)) 
             nonsub_hist = []
@@ -341,8 +367,13 @@ def hist_timely_measure(all_tfs_list, subsampled_tfs_list, t = 5):
             sub_array = np.array(sub_hist)
             nonsub_array = nonsub_array / (np.sum(nonsub_array) * 1.0)
             sub_array = sub_array / (np.sum(sub_array) * 1.0)
+            nonsub_hist_cv = nonsub_array.ravel().astype('float32') 
+            sub_hist_cv = sub_array.ravel().astype('float32') 
+             
+            corr_score =  cv2.compareHist(nonsub_hist_cv, sub_hist_cv, cv2.cv.CV_COMP_CORREL)
             dist = L1_dist(nonsub_array, sub_array)
             timely_dist[chunk_num] = dist
+            timely_corr[chunk_num] = corr_score
             
             prev_sub_chunk = sub_chunk
             chunk_num += 1
@@ -350,7 +381,8 @@ def hist_timely_measure(all_tfs_list, subsampled_tfs_list, t = 5):
             sub_chunk = {}
            
     ave_dist = sum(map(lambda x:timely_dist[x], timely_dist))/(len(timely_dist) * 1.0)
-    return ave_dist, timely_dist 
+    ave_corr = sum(map(lambda x:timely_corr[x], timely_corr))/(len(timely_corr) * 1.0)
+    return ave_dist, ave_corr
 
 def top_word_timely_measure(k, all_tf, all_tfs_list, subsampled_tfs_list):
 
@@ -372,15 +404,20 @@ def top_word_timely_measure(k, all_tf, all_tfs_list, subsampled_tfs_list):
                 break
 
     for keyword in top_k_w:
+        keyword_found = False
         for idx, d in enumerate(subsampled_tfs_list):
             tf = d['tf']  
             frame_name = d['frame_name']
             if keyword in tf:
+                keyword_found = True
                 subsampled_occur_time[keyword] = int(frame_name.split('.')[0])
                 break
 
-    #print nonsubsampled_occur_time
-    #print subsampled_occur_time
+        # TODO: Make suer this makes sense -- if subsampled never gets this keyword, its occurence is the last frame
+        if not keyword_found:
+            # its occurence is at the end of the video
+            subsampled_occur_time[keyword] = int(all_tfs_list[-1]['frame_name'].split('.')[0])
+
 
     occur_dist = {} # in ms
 
@@ -450,28 +487,133 @@ if __name__ == "__main__":
         all_tfs_list = combine_all_models(video_name, _vgg_data, _msr_cap_data, _rcnn_data, _fei_caption_data)
         all_tf = get_combined_tfs(all_tfs_list)
    
-       
-        DIP_THRESHOLD = 0.5
+        # All detailed measure 
+        DETAIL_THRESHOLD = 0.8
         start_idx = 0
         end_idx = 0
         cur_rep_frames = {}
+        cur_tfs_list = [all_tfs_list[0]]
+        detailed_values = []
         while True:
             if end_idx == len(all_tfs_list):
                 break
        
-            if end_idx == 0:
-                cur_rep_frames = all_tfs_list[end_idx]
-                end_idx += 1
-                continue
+            gt_tfs_list = all_tfs_list[start_idx : end_idx + 1]
+     
+            gt_tf = get_combined_tfs(gt_tfs_list)
+            cur_tf = get_combined_tfs(cur_tfs_list)
+            detailed_m = detailed_measure(gt_tf, cur_tf)
+            detailed_values += [detailed_m]
+             
+
+            if end_idx > 0 and detailed_m < DETAIL_THRESHOLD:
+                cur_tfs_list += [all_tfs_list[end_idx]]
+                #start_idx = end_idx                
             
-            cur_score = get_agg_score( all_tfs_list[ start_idx: end_idx+ 1], cur_rep_frames)
-            if cur_score < DIP_THRESHOLD:
-                cur_rep_frames = all_tfs_list[end_idx]
-                start_idx = end_idx                
+            end_idx += 1 
+        print len(cur_tfs_list) 
+   
+        # All histogram correlation       
+        CORRE_THRESHOLD = 0.925
+        start_idx = 0
+        end_idx = 0
+        cur_rep_frames = {}
+        cur_tfs_list = [all_tfs_list[0]]
+        hist_measures = []
+        while True:
+            if end_idx == len(all_tfs_list):
+                break
+       
+            gt_tfs_list = all_tfs_list[start_idx : end_idx + 1]
+
+
+            gt_tf = get_combined_tfs(gt_tfs_list)
+            cur_tf = get_combined_tfs(cur_tfs_list)
+            l1_dist, corr_score, chisq_dist = hist_measure(gt_tf, cur_tf)
+            hist_measures += [corr_score]
+             
+
+            if end_idx > 0 and corr_score < CORRE_THRESHOLD:
+                cur_tfs_list += [all_tfs_list[end_idx]]
+                #start_idx = end_idx                
+            
+            end_idx += 1 
+        print len(cur_tfs_list) 
+
+        # Timeliness correlation
+        T_CORRE_THRESHOLD = 0.9
+        start_idx = 0
+        end_idx = 0
+        cur_rep_frames = {}
+        cur_tfs_list = [all_tfs_list[0]]
+        t_hist_measures = []
+        while True:
+            if end_idx == len(all_tfs_list):
+                break
+                  
+            gt_tfs_list = all_tfs_list[start_idx : end_idx + 1]
+            
+            
+            ave_dist, ave_corr = hist_timely_measure(gt_tfs_list, cur_tfs_list)
+            t_hist_measures += [ave_corr]
+             
+
+            if end_idx > 0 and ave_corr < T_CORRE_THRESHOLD:
+                cur_tfs_list += [all_tfs_list[end_idx]]
+                #start_idx = end_idx                
  
             end_idx += 1 
-                        
- 
+        print len(cur_tfs_list) 
+        
+        # top k 
+        TOPK_THRESHOLD = 1000
+        start_idx = 0
+        end_idx = 0
+        cur_rep_frames = {}
+        cur_tfs_list = [all_tfs_list[0]]
+        topk_dists = []
+        while True:
+            if end_idx == len(all_tfs_list):
+                break
+       
+                  
+            gt_tfs_list = all_tfs_list[start_idx : end_idx + 1]
+            gt_tf = get_combined_tfs(gt_tfs_list)
+            ave_dist, dummy= top_word_timely_measure(10, gt_tf, gt_tfs_list, cur_tfs_list)
+            topk_dists += [ave_dist]
+             
+
+            if end_idx > 0 and ave_dist > TOPK_THRESHOLD:
+                cur_tfs_list += [all_tfs_list[end_idx]]
+                #start_idx = end_idx                
+            
+            end_idx += 1 
+        print len(cur_tfs_list) 
+
+        plt.figure(1)
+        plt.title('# subsampled distinct word/# nonsubsampled distinct word (bigger -> more similar)')
+        plt.plot(range(len(detailed_values)), detailed_values) 
+        plt.xlabel('Frame ID')
+        plt.ylabel('# subsampled distinct word/# nonsubsampled distinct word')
+       
+        plt.figure(2) 
+        plt.title('Histogram Correlation (bigger -> more similar)')
+        plt.plot(range(len(hist_measures)), hist_measures) 
+        plt.xlabel('Frame ID')
+        plt.ylabel('Histogram Correlation')
+        
+        plt.figure(3) 
+        plt.title('5-sec Histogram Correlation (bigger -> more similar)')
+        plt.plot(range(len(t_hist_measures)), t_hist_measures) 
+        plt.xlabel('Frame ID')
+        plt.ylabel('5-sec Histogram Correlation')
+        
+        plt.figure(4) 
+        plt.title('Top k word occurence time difference (smaller->more similar)')
+        plt.plot(range(len(topk_dists)), topk_dists) 
+        plt.xlabel('Frame ID')
+        plt.ylabel('Ave occurence time diff (ms)')
+        plt.show()
         # frame difference
         #framediff_retained_frames = framediff_select(video_name, frame_names) 
         #framediff_tfs_list = subsample_tf_list(framediff_retained_frames, all_tfs_list) 
@@ -494,24 +636,24 @@ if __name__ == "__main__":
  
         # uniformly subsample frames 
         #for frame_rate in [0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6]:
-        for retained_frame_rate in [0.01, 0.03, 0.05, 0.1, 0.2, 0.5]:
-            retained_frames = naive_subsample_frames(frame_names, retained_frame_rate)
-            subsampled_tfs_list = subsample_tf_list(retained_frames, all_tfs_list) 
-            subsampled_tf = get_combined_tfs(subsampled_tfs_list)
-            print '-----------------UNIFORM-------------------------'
-            print '<retained rate>', retained_frame_rate
-            print '1. # subsampled distinct word/nonsubsampled>', detailed_measure(all_tf, subsampled_tf)
-            l1_dist, correl_score, chisq_dist = hist_measure(all_tf, subsampled_tf)
-            print '2. hist measure'
-            print '\t L1-dist (smaller -> similar)', l1_dist
-            print '\t Correlation (smaller -> similar)', correl_score
-            print '\t Chi-sq (bigger -> similar)', chisq_dist
+        #for retained_frame_rate in [0.01, 0.03, 0.05, 0.1, 0.2, 0.5]:
+        #    retained_frames = naive_subsample_frames(frame_names, retained_frame_rate)
+        #    subsampled_tfs_list = subsample_tf_list(retained_frames, all_tfs_list) 
+        #    subsampled_tf = get_combined_tfs(subsampled_tfs_list)
+        #    print '-----------------UNIFORM-------------------------'
+        #    print '<retained rate>', retained_frame_rate
+        #    print '1. # subsampled distinct word/nonsubsampled>', detailed_measure(all_tf, subsampled_tf)
+        #    l1_dist, correl_score, chisq_dist = hist_measure(all_tf, subsampled_tf)
+        #    print '2. hist measure'
+        #    print '\t L1-dist (smaller -> similar)', l1_dist
+        #    print '\t Correlation (smaller -> similar)', correl_score
+        #    print '\t Chi-sq (bigger -> similar)', chisq_dist
 
-            ave_dist, occur_dist = top_word_timely_measure(k, all_tf, all_tfs_list, subsampled_tfs_list)
-            print '3. top', k, 'word timely measure (ms):', ave_dist
-            ave_dist, timely_dist = hist_timely_measure(all_tfs_list, subsampled_tfs_list)
-            print '4. timely hist measure:', ave_dist
-        
+        #    ave_dist,  = top_word_timely_measure(k, all_tf, all_tfs_list, subsampled_tfs_list)
+        #    print '3. top', k, 'word timely measure (ms):', ave_dist
+        #    ave_dist, ave_corr = hist_timely_measure(all_tfs_list, subsampled_tfs_list)
+        #    print '4. timely hist measure:', ave_dist
+        #
                 
                
  
