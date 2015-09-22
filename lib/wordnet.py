@@ -15,6 +15,18 @@ def word_wnid_dict():
 
     return word_to_wnid_dict, wnid_to_word_dict
 
+def word_prefix_to_wnid_dict():
+
+    word_pref_to_wnid = {}
+
+    with open('/home/t-yuche/lib/wordnet_data/synset_words.txt') as f:
+        for l in f:
+            wnid = l.strip()[:9]
+            s = l.strip()[10:]
+            w_pref = s.split(',')[0]
+            word_pref_to_wnid[w_pref] = wnid
+    
+    return word_pref_to_wnid 
 
 def wnid_to_stopword_dict():
 
