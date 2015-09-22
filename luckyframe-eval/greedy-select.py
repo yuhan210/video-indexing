@@ -1,6 +1,8 @@
 from nltk.corpus import stopwords
+import scipy.spatial.distance
 import numpy as np
 import operator
+import shutil
 import math
 import time
 import sys
@@ -111,6 +113,8 @@ def L1_dist(a_hist, b_hist): # incorrect
     return np.linalg.norm((a_hist-b_hist), ord = 1)/(a_hist.shape[0] * .01)
 
 
+def cos_similarity(a_hist, b_hist):
+    return 1 - scipy.spatial.distance.cosine(a_hist, b_hist) 
 '''
 similarity of the word distribution
 '''
@@ -139,6 +143,7 @@ def hist_measure(all_tf, subsampled_tf, plot_fig = False):
     correlation_score =  cv2.compareHist(all_hist_cv, sub_hist_cv, cv2.cv.CV_COMP_CORREL)
     chisq_dist = cv2.compareHist(all_hist_cv, sub_hist_cv, cv2.cv.CV_COMP_CHISQR)
     l1_dist = L1_dist(all_array, sub_array)
+    cos_sim = cos_similarity(all_array, sub_array)
     '''
     print 'Correlation (higher-> similar) :', cv2.compareHist(all_hist_cv, sub_hist_cv, cv2.cv.CV_COMP_CORREL)
     print 'Chi-square (smaller-> similar) :', cv2.compareHist(all_hist_cv, sub_hist_cv, cv2.cv.CV_COMP_CHISQR)
@@ -161,7 +166,8 @@ def hist_measure(all_tf, subsampled_tf, plot_fig = False):
         ax.set_title('Correlation')
         plt.show()
 
-    return l1_dist, correlation_score, chisq_dist 
+    return l1_dist, correlation_score, chisq_dist, cos_sim
+
     
 def composeVGGWordnet(w, wordnet_tree_path = 'new_synset_word.txt'):
     
@@ -343,7 +349,9 @@ def hist_timely_measure(all_tfs_list, subsampled_tfs_list, t = 5):
             
         # process this chunk and advance to the next chunk 
         # if no more fids or next fid both >= chunk_num * chunk_size
-        if ( nonsubsampled_idx == len(all_tfs_list) and subsampled_idx == len(subsampled_tfs_list) ) or (subsampled_idx != len(subsampled_tfs_list) and nonsubsampled_idx != len(all_tfs_list) and int(subsampled_tfs_list[subsampled_idx]['frame_name'].split('.')[0]) >= chunk_num * chunk_size and int (all_tfs_list[nonsubsampled_idx]['frame_name'].split('.')[0]) >= chunk_num * chunk_size) or (subsampled_idx == len(subsampled_tfs_list) and int(all_tfs_list[nonsubsampled_idx]['frame_name'].split('.')[0]) >= chunk_num * chunk_size): 
+        if (nonsubsampled_idx == len(all_tfs_list) and subsampled_idx == len(subsampled_tfs_list) ) or \
+           (subsampled_idx != len(subsampled_tfs_list) and nonsubsampled_idx != len(all_tfs_list) and int(subsampled_tfs_list[subsampled_idx]['frame_name'].split('.')[0]) >= chunk_num * chunk_size and int (all_tfs_list[nonsubsampled_idx]['frame_name'].split('.')[0]) >= chunk_num * chunk_size) or \
+           (subsampled_idx == len(subsampled_tfs_list) and int(all_tfs_list[nonsubsampled_idx]['frame_name'].split('.')[0]) >= chunk_num * chunk_size): 
  
        #if nonsubsampled_idx >= chunk_num * chunk_size and subsampled_idx >= chunk_num * chunk_size:
             # compute nonsub_chunk and sub_chunk dist
@@ -462,11 +470,37 @@ def framediff_select(video_name, frame_names):
 
     return retained_frames
 
+def store_keyframes(video_name, keyframe_ids, outfolder = './keyframes'):
+    
+    frames = [os.path.join('/mnt/frames', video_name, x) for x in sorted(os.listdir(os.path.join('/mnt/frames', video_name)), key= lambda x: int(x.split('.')[0]))]
+
+    prev_frame_jump = 3
+    if os.path.exists(outfolder):
+        shutil.rmtree(outfolder)    
+    os.makedirs(outfolder)
+
+    for fid, frame_path in enumerate(frames):
+        if fid == 0:
+            continue
+
+        if fid in keyframe_ids:# keyframe
+            idx = keyframe_ids.index(fid)
+
+            frame_name = frame_path.split('/')[-1] 
+            dst_filename = str(idx) + '_k_' + frame_name
+            shutil.copyfile(frame_path, os.path.join(outfolder, dst_filename))
+            
+            prev_framename = frames[fid-prev_frame_jump].split('/')[-1] 
+            prev_dst_filename = str(idx) + '_kp_' + prev_framename
+            shutil.copyfile(frames[fid-prev_frame_jump], os.path.join(outfolder, prev_dst_filename))
+
+
 if __name__ == "__main__":
    
-    VIDEO_LIST = '/mnt/test_video.txt'
+    VIDEO_LIST = '/mnt/video_list.txt'
     videos = open(VIDEO_LIST).read().split()
 
+    fh = open('./sample_log.txt', 'w') 
     for video_name in videos:
         
         if not os.path.exists(os.path.join('/mnt/tags/rcnn-info-all', video_name + '_rcnnrecog.json')) or not os.path.exists(os.path.join('/mnt/tags/vgg-classify-all', video_name + '_recog.json')) or not os.path.exists(os.path.join('/mnt/tags/msr-caption-all', video_name + '_msrcap.json')) or not os.path.exists(os.path.join('/mnt/tags/fei-caption-all', video_name + '_5_caption.json')):
@@ -487,133 +521,209 @@ if __name__ == "__main__":
         all_tfs_list = combine_all_models(video_name, _vgg_data, _msr_cap_data, _rcnn_data, _fei_caption_data)
         all_tf = get_combined_tfs(all_tfs_list)
    
+        hysteresis_num = 2
         # All detailed measure 
-        DETAIL_THRESHOLD = 0.8
+        DETAIL_THRESHOLD = 0.4
         start_idx = 0
         end_idx = 0
-        cur_rep_frames = {}
         cur_tfs_list = [all_tfs_list[0]]
         detailed_values = []
+        detailed_picked_fid = [0]
+
         while True:
             if end_idx == len(all_tfs_list):
                 break
        
             gt_tfs_list = all_tfs_list[start_idx : end_idx + 1]
-     
             gt_tf = get_combined_tfs(gt_tfs_list)
-            cur_tf = get_combined_tfs(cur_tfs_list)
-            detailed_m = detailed_measure(gt_tf, cur_tf)
-            detailed_values += [detailed_m]
-             
 
-            if end_idx > 0 and detailed_m < DETAIL_THRESHOLD:
-                cur_tfs_list += [all_tfs_list[end_idx]]
-                #start_idx = end_idx                
-            
+            cur_tf = get_combined_tfs(cur_tfs_list)
+
+            detailed_m = detailed_measure(gt_tf, cur_tf)
+              
+            detailed_values += [detailed_m]
+
+            if detailed_m < DETAIL_THRESHOLD and (end_idx + hysteresis_num) < len(all_tfs_list):
+
+                # eat some hysteresis frames
+                for i in xrange(hysteresis_num):
+                     
+                    end_idx += 1 
+                    gt_tfs_list = all_tfs_list[start_idx : end_idx + 1]
+                    gt_tf = get_combined_tfs(gt_tfs_list)
+
+                    if i == hysteresis_num - 1:
+                        detailed_picked_fid += [end_idx] 
+                        cur_tfs_list = [all_tfs_list[end_idx]]
+                        cur_tf = get_combined_tfs(cur_tfs_list)
+                        start_idx = end_idx
+                        gt_tfs_list = all_tfs_list[start_idx : end_idx + 1]
+                        gt_tf = get_combined_tfs(gt_tfs_list)
+                    
+                    detailed_m = detailed_measure(gt_tf, cur_tf)
+                    detailed_values += [detailed_m]
+
             end_idx += 1 
-        print len(cur_tfs_list) 
+        print len(detailed_picked_fid) 
    
         # All histogram correlation       
-        CORRE_THRESHOLD = 0.925
+        CORRE_THRESHOLD = 0.87
         start_idx = 0
         end_idx = 0
-        cur_rep_frames = {}
         cur_tfs_list = [all_tfs_list[0]]
         hist_measures = []
+        hist_measure_picked_fid = [0]
         while True:
             if end_idx == len(all_tfs_list):
                 break
        
             gt_tfs_list = all_tfs_list[start_idx : end_idx + 1]
-
-
             gt_tf = get_combined_tfs(gt_tfs_list)
+
             cur_tf = get_combined_tfs(cur_tfs_list)
-            l1_dist, corr_score, chisq_dist = hist_measure(gt_tf, cur_tf)
-            hist_measures += [corr_score]
+            l1_dist, corr_score, chisq_dist, cos_sim = hist_measure(gt_tf, cur_tf)
              
+            hist_measures += [cos_sim]
 
-            if end_idx > 0 and corr_score < CORRE_THRESHOLD:
-                cur_tfs_list += [all_tfs_list[end_idx]]
-                #start_idx = end_idx                
-            
+            if cos_sim < CORRE_THRESHOLD and (end_idx + hysteresis_num) < len(all_tfs_list): 
+                
+                for i in xrange(hysteresis_num):
+
+                    end_idx += 1
+                    gt_tfs_list = all_tfs_list[start_idx : end_idx + 1]
+                    gt_tf = get_combined_tfs(gt_tfs_list)
+               
+                    if i == hysteresis_num - 1:
+                        hist_measure_picked_fid += [end_idx]
+                
+                        cur_tfs_list = [all_tfs_list[end_idx]]
+                        cur_tf = get_combined_tfs(cur_tfs_list)
+
+                        start_idx = end_idx
+                        gt_tfs_list = all_tfs_list[start_idx : end_idx + 1]
+                        gt_tf = get_combined_tfs(gt_tfs_list)
+
+                    l1_dist, corr_score, chisq_dist, cos_sim = hist_measure(gt_tf, cur_tf)
+                    hist_measures += [cos_sim]
+                    
             end_idx += 1 
-        print len(cur_tfs_list) 
+        print len(hist_measure_picked_fid) 
 
+        '''
         # Timeliness correlation
         T_CORRE_THRESHOLD = 0.9
         start_idx = 0
         end_idx = 0
-        cur_rep_frames = {}
         cur_tfs_list = [all_tfs_list[0]]
         t_hist_measures = []
+        t_hist_measure_picked_fid = [0]
         while True:
             if end_idx == len(all_tfs_list):
                 break
                   
             gt_tfs_list = all_tfs_list[start_idx : end_idx + 1]
             
-            
             ave_dist, ave_corr = hist_timely_measure(gt_tfs_list, cur_tfs_list)
-            t_hist_measures += [ave_corr]
              
 
             if end_idx > 0 and ave_corr < T_CORRE_THRESHOLD:
-                cur_tfs_list += [all_tfs_list[end_idx]]
-                #start_idx = end_idx                
+                #cur_tfs_list += [all_tfs_list[end_idx]]
+                start_idx = end_idx
+
+                gt_tfs_list = all_tfs_list[start_idx : end_idx + 1]
+                
+                cur_tfs_list = [all_tfs_list[end_idx]]
+        
+                ave_dist, ave_corr = hist_timely_measure(gt_tfs_list, cur_tfs_list)
+                t_hist_measure_picked_fid += [end_idx] 
  
+            t_hist_measures += [ave_corr]
             end_idx += 1 
-        print len(cur_tfs_list) 
+        print len(t_hist_measure_picked_fid) 
         
         # top k 
         TOPK_THRESHOLD = 1000
         start_idx = 0
         end_idx = 0
-        cur_rep_frames = {}
         cur_tfs_list = [all_tfs_list[0]]
         topk_dists = []
+        top_k_picked_fid = [0]
         while True:
             if end_idx == len(all_tfs_list):
                 break
        
-                  
             gt_tfs_list = all_tfs_list[start_idx : end_idx + 1]
+
             gt_tf = get_combined_tfs(gt_tfs_list)
             ave_dist, dummy= top_word_timely_measure(10, gt_tf, gt_tfs_list, cur_tfs_list)
-            topk_dists += [ave_dist]
              
 
             if end_idx > 0 and ave_dist > TOPK_THRESHOLD:
-                cur_tfs_list += [all_tfs_list[end_idx]]
-                #start_idx = end_idx                
-            
-            end_idx += 1 
-        print len(cur_tfs_list) 
+                #cur_tfs_list += [all_tfs_list[end_idx]]
+                start_idx = end_idx
 
-        plt.figure(1)
-        plt.title('# subsampled distinct word/# nonsubsampled distinct word (bigger -> more similar)')
-        plt.plot(range(len(detailed_values)), detailed_values) 
-        plt.xlabel('Frame ID')
-        plt.ylabel('# subsampled distinct word/# nonsubsampled distinct word')
-       
-        plt.figure(2) 
-        plt.title('Histogram Correlation (bigger -> more similar)')
-        plt.plot(range(len(hist_measures)), hist_measures) 
-        plt.xlabel('Frame ID')
-        plt.ylabel('Histogram Correlation')
+                gt_tfs_list = all_tfs_list[start_idx : end_idx + 1]
+                gt_tf = get_combined_tfs(gt_tfs_list)
+
+                cur_tfs_list = [all_tfs_list[end_idx]]
+                
+                ave_dist, dummy= top_word_timely_measure(10, gt_tf, gt_tfs_list, cur_tfs_list)
+                top_k_picked_fid += [end_idx]
+            
+            topk_dists += [ave_dist]
+            end_idx += 1 
+        print len(top_k_picked_fid) 
+        '''
+
+        store_keyframes(video_name, detailed_picked_fid, os.path.join('./keyframes', video_name, 'detailed'))
+        store_keyframes(video_name, hist_measure_picked_fid, os.path.join('./keyframes', video_name, 'hist_measure'))
+
+        fh.write(video_name + '\n')
+        fh.write('Detailed:' + str(len(detailed_picked_fid)/(len(detailed_values) * 1.0)) + '\n')
+        fh.write('Hist:' + str(len(hist_measure_picked_fid)/(len(detailed_values) * 1.0)) + '\n\n')
+        '''
+        fig = plt.figure(1)
+        ax = fig.add_subplot(111)
+        ax.set_title('# subsampled distinct word/# nonsubsampled distinct word (bigger -> more similar)')
         
+        plt.text(len(detailed_values)/2, DETAIL_THRESHOLD - 0.2, 'Portion of selected frames:' + str(len(detailed_picked_fid)/(len(detailed_values) * 1.0)),fontsize = 20)
+        plt.plot(range(len(detailed_values)), detailed_values)
+        plt.scatter(detailed_picked_fid, [1 for x in detailed_picked_fid], marker = (5,1))
+        plt.plot([0, len(detailed_values)], [DETAIL_THRESHOLD, DETAIL_THRESHOLD], 'k-')
+        ax.set_xlabel('Frame ID')
+        ax.set_ylabel('# subsampled distinct word/# nonsubsampled distinct word')
+        ax.set_ylim([0,1]) 
+ 
+        fig = plt.figure(2)
+        ax = fig.add_subplot(111) 
+        ax.set_title('Histogram Correlation (bigger -> more similar)')
+
+        plt.text(len(detailed_values)/2, CORRE_THRESHOLD - 0.2, 'Portion of selected frames:' + str(len(hist_measure_picked_fid)/(len(detailed_values) * 1.0)),fontsize = 20)
+        plt.plot(range(len(hist_measures)), hist_measures) 
+        plt.scatter(hist_measure_picked_fid, [1 for x in hist_measure_picked_fid], marker = (5,1))
+        plt.plot([0, len(detailed_values)], [CORRE_THRESHOLD, CORRE_THRESHOLD], 'k-')
+        ax.set_xlabel('Frame ID')
+        ax.set_ylabel('Histogram Correlation')
+        ax.set_ylim([0,1]) 
+        '''
+        
+        ''' 
         plt.figure(3) 
         plt.title('5-sec Histogram Correlation (bigger -> more similar)')
         plt.plot(range(len(t_hist_measures)), t_hist_measures) 
+        plt.scatter(t_hist_measure_picked_fid, [1 for x in t_hist_measure_picked_fid], marker = (5,1))
         plt.xlabel('Frame ID')
         plt.ylabel('5-sec Histogram Correlation')
         
         plt.figure(4) 
         plt.title('Top k word occurence time difference (smaller->more similar)')
         plt.plot(range(len(topk_dists)), topk_dists) 
+        plt.scatter(top_k_picked_fid, [1 for x in top_k_picked_fid], marker = (5,1))
         plt.xlabel('Frame ID')
         plt.ylabel('Ave occurence time diff (ms)')
         plt.show()
+        '''
+        
         # frame difference
         #framediff_retained_frames = framediff_select(video_name, frame_names) 
         #framediff_tfs_list = subsample_tf_list(framediff_retained_frames, all_tfs_list) 
@@ -656,5 +766,4 @@ if __name__ == "__main__":
         #
                 
                
- 
-        break 
+    fh.close() 
