@@ -16,6 +16,18 @@ def word_wnid_dict():
     return word_to_wnid_dict, wnid_to_word_dict
 
 
+def wnid_to_stopword_dict():
+
+    wnid_to_stopword = {}
+    
+    dummy, wnidtow = word_wnid_dict()
+    wtos = word_to_stopword_dict()    
+
+    for wnid in wnidtow:
+        w = wnidtow[wnid]
+        wnid_to_stopword[wnid] = wtos[w]
+
+    return wnid_to_stopword 
 
 def word_to_stopword_dict():
    
