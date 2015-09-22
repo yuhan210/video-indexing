@@ -78,7 +78,6 @@ def word_traces_dict():
             
             for iw in word_tree[wnid][0]:
                 iw = iw[-1]
-                print iw
                 trace[word] += [[iw]]
                 if iw == stop_word:
                     break
