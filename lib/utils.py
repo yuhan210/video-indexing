@@ -64,16 +64,32 @@ def load_suggested_labels(video_name, anno_folder="/home/t-yuche/gt-labeling/sug
 
 
 
+def load_video_processed_turker(turker_folder, video_name):
+    '''
+    Return singularized turker label
+    '''
+    file_path = os.path.join(turker_folder, video_name + '.json')
+        
+    if not os.path.exists(file_path):
+        return None    
+
+    with open(file_path) as fh:
+        return json.load(fh) 
+
 def load_video_turker(turker_folder, video_name):
     '''
     Return a dict: 
     key: frame_id (str)
     value: a list of smaller lists(each list is a choice)
     '''
-   
+    
     folder = os.path.join(turker_folder, video_name)
-    files = sorted(os.listdir(folder), key = lambda x: int(x.split('.')[0]))
+    
     ds = {}
+    if not os.path.exists(folder):
+        return ds
+
+    files = sorted(os.listdir(folder), key = lambda x: int(x.split('.')[0]))
     for f in files:
         f_path = os.path.join(folder, f)
         with open(f_path) as json_file:
