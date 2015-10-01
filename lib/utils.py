@@ -22,6 +22,8 @@ def get_combined_tfs(tfs_dict):
 def combine_all_models(video_name, _vgg_data, _msr_data, _rcnn_data, _fei_data):
 
     stop_words = get_stopwords()
+    wptospd = word_pref_to_stopword_pref_dict()
+
     tf_list = []
     assert(len(_vgg_data) == len(_msr_data))
     assert(len(_rcnn_data) == len(_fei_data))
@@ -75,8 +77,7 @@ def combine_all_models(video_name, _vgg_data, _msr_data, _rcnn_data, _fei_data):
             else:
                 words[w] += 1
         for w in vgg_ws:
-            w = composeVGGWordnet(w)
-            w = w.split('->')[-1] 
+            w = wptospd[w] 
             if w not in words:
                 words[w] = 1
             else:
