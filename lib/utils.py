@@ -1,8 +1,102 @@
 from nltk.stem.wordnet import WordNetLemmatizer
+from nlp import *
+from wordnet import *
+import inflection 
 import json
 import nltk
 import csv
 import os
+
+def get_combined_tfs(tfs_dict):
+
+    combined_tfs = {}
+    for d in tfs_dict:
+        for w in d['tf']:
+            if w not in combined_tfs:
+                combined_tfs[w] = 1
+            else:
+                combined_tfs[w] += 1
+
+    return combined_tfs
+
+def combine_all_models(video_name, _vgg_data, _msr_data, _rcnn_data, _fei_data):
+
+    stop_words = get_stopwords()
+    tf_list = []
+    assert(len(_vgg_data) == len(_msr_data))
+    assert(len(_rcnn_data) == len(_fei_data))
+    assert(len(_vgg_data) == len(_fei_data))
+
+    for fid in xrange(len(_vgg_data)):
+
+        rcnn_data = _rcnn_data[fid]
+        vgg_data = _vgg_data[fid]
+        msr_data = _msr_data[fid]
+        fei_data = _fei_data[fid]
+   
+        frame_name = rcnn_data['image_path'].split('/')[-1]
+        assert(rcnn_data['image_path'] == vgg_data['img_path'])
+        assert(rcnn_data['image_path'] == msr_data['img_path'])
+        assert(rcnn_data['image_path'] == fei_data['img_path'])
+
+        # combine words
+        rcnn_ws = []
+        if len(rcnn_data) > 0:
+            for rcnn_idx, word in enumerate(rcnn_data['pred']['text']):
+                ## the confidence is higher than 10^(-3) and is not background
+                if rcnn_data['pred']['conf'][rcnn_idx] > 0.0005 and word not in stop_words:
+                    rcnn_ws += [word]
+ 
+        vgg_ws = []
+        if len(vgg_data) > 0:        
+            vgg_ws = [w for w in vgg_data['pred']['text']]
+    
+        fei_ws = [] 
+        if len(fei_data) > 0:
+            str_list = fei_data['candidate']['text']
+            for s in str_list:
+                for w in s.split(' '):
+                    w = inflection.singularize(w)
+                    if w not in stop_words and w not in fei_ws:
+                        fei_ws += [w]         
+
+        msr_ws = [] 
+        if len(msr_data) > 0:
+            for msr_idx, w in enumerate(msr_data['words']['text']):
+                w = inflection.singularize(w)
+                prob = msr_data['words']['prob'][msr_idx]
+                if w not in stop_words and w not in msr_ws:
+                    msr_ws += [w]
+
+        words = {}
+        for w in rcnn_ws:
+            if w not in words:
+                words[w] = 1
+            else:
+                words[w] += 1
+        for w in vgg_ws:
+            w = composeVGGWordnet(w)
+            w = w.split('->')[-1] 
+            if w not in words:
+                words[w] = 1
+            else:
+                words[w] += 1
+        
+        for w in fei_ws:
+            if w not in words:
+                words[w] = 1
+            else:
+                words[w] += 1
+    
+        for w_idx, w in enumerate(msr_ws):
+            if w not in words:
+                words[w] = 1
+            else:
+                words[w] += 1
+
+        tf_list += [{'frame_name': frame_name, 'tf': words}]
+
+    return tf_list
 
 
 def getwnid(w):
