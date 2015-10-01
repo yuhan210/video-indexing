@@ -7,6 +7,22 @@ import nltk
 import csv
 import os
 
+def naive_subsample_frames(all_frames, FRAME_RETAIN_RATE):
+
+    n_picked_frames = len(all_frames) * FRAME_RETAIN_RATE
+    step = n_picked_frames/((len(all_frames) ) * 1.0)
+    track = 0
+    counter = 0
+    retained_frames = [] 
+    for idx, frame_name in enumerate(all_frames):
+        if int(track) == counter:
+            retained_frames += [frame_name]
+            counter += 1
+        track += step
+
+    return retained_frames
+
+
 def get_combined_tfs(tfs_dict):
 
     combined_tfs = {}
