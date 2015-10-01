@@ -7,6 +7,33 @@ import nltk
 import csv
 import os
 
+def cos_similarty(a_dict, b_dict):
+    '''
+    Compute the cos similarity between two tfs (two dictionary)
+    '''   
+ 
+    space = list(set(a_dict.keys()) | set(b_dict.keys()))
+    
+    # compute consine similarity (a dot b/ ||a|| * ||b||)
+    sumab = 0.0
+    sumaa = 0.0
+    sumbb = 0.0
+
+    for dim in space:
+
+        a = 0.0
+        b = 0.0
+        if dim in a_dict:
+            a = a_dict[dim]
+        if dim in b_dict:
+            b = b_dict[dim]
+        
+        sumab += a * b
+        sumaa += a * a
+        sumbb += b * b        
+    
+    return sumab/(math.sqrt(sumaa) * math.sqrt(sumbb))
+ 
 def naive_subsample_frames(all_frames, FRAME_RETAIN_RATE):
 
     n_picked_frames = len(all_frames) * FRAME_RETAIN_RATE
