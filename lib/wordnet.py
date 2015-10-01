@@ -28,6 +28,18 @@ def word_prefix_to_wnid_dict():
     
     return word_pref_to_wnid 
 
+def wnid_to_label_dict():
+  
+    wnidtolabel = {} 
+    with open('/home/t-yuche/lib/wordnet_data/train_caffe.txt') as f:
+        for l in f:
+            segs = l.strip().split()
+            caffe_label = int(segs[1])
+            wnid = segs[0].split('/')[0]
+            wnidtolabel[wnid] = caffe_label
+
+    return wnidtolabel
+
 def wnid_to_stopword_dict():
 
     wnid_to_stopword = {}
@@ -40,6 +52,22 @@ def wnid_to_stopword_dict():
         wnid_to_stopword[wnid] = wtos[w]
 
     return wnid_to_stopword 
+
+def word_pref_to_stopword_pref_dict():
+    
+    wordp_to_stopwordp = {}
+    
+    with open('/home/t-yuche/lib/wordnet_data/new_synset_word.txt') as f:
+        data = json.load(f)
+        for w in data:
+            stop_word = data[w]
+            if type(stop_word) is list:
+                stop_word = ', '.join(stop_word)
+            w = w.replace('_', ',').split(',')[0]
+            wordp_to_stopwordp[w] = stop_word.split(',')[0]
+
+    return wordp_to_stopwordp
+   
 
 def word_to_stopword_dict():
    
