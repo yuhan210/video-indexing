@@ -48,11 +48,14 @@ def load_video_rcnn_bbx(rcnn_bbx_folder, video_name):
 if __name__ == "__main__":
 
     video_name = sys.argv[1]
+    start_fid = int(sys.argv[2])
     #rcnn_data = load_video_rcnn_bbx('/mnt/tags/rcnn-bbx-tmp', 'dog_fight_pit_bull_owner_sues_family_for_1m_dollars_after_her_dogs_killed_their_beagle_sYJf_m0qDiw')
     #rcnn_data = load_video_rcnn_bbx('/mnt/tags/rcnn-bbx-tmp', 'dog_fight_pit_bull_owner_sues_family_for_1m_dollars_after_her_dogs_killed_their_beagle_sYJf_m0qDiw')
     rcnn_data = load_video_rcnn_bbx('/mnt/tags/rcnn-bbx-tmp', video_name)
 
-    for img_obj in rcnn_data:
+    for fid, img_obj in enumerate(rcnn_data):
+        if fid < start_fid:
+            continue
         im_path = img_obj['img_path']
         vis_detections(im_path, img_obj['pred'], 0.4)
         
