@@ -102,11 +102,11 @@ def Detect_proposals(net, image_path, proposal_path):
             bbox = dets[i, :4]
             score = dets[i, -1]
             bbx_d = {}
-            bbx_d['bbox'] = (bbox[0], bbox[1], bbox[2], bbox[3])
-            bbx_d['score'] = score 
+            bbx_d['bbox'] = [int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3])]
+            bbx_d['score'] = float(score) 
             bbx_d['class'] = cls
             img_blob['pred'] += [bbx_d]
-
+    print timer.total_time
     img_blob['rcnn_time'] = timer.total_time
 
     return img_blob
