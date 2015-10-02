@@ -2,10 +2,24 @@ from nltk.stem.wordnet import WordNetLemmatizer
 from nlp import *
 from wordnet import *
 import inflection 
+import math
 import json
 import nltk
 import csv
 import os
+
+def load_video_rcnn_bbx(rcnn_bbx_folder, video_name):
+
+    file_pref = os.path.join(rcnn_bbx_folder, video_name)    
+
+    # load rcnn bbx
+    with open(file_pref + '_rcnnbbx.json') as json_file:
+        rcnn_bbx_data = json.load(json_file)
+
+    rcnn_bbx_data = sorted(rcnn_bbx_data['imgblobs'], key=lambda x: int(x['img_path'].split('/')[-1].split('.')[0]))
+
+    return rcnn_bbx_data
+
 
 def cos_similarty(a_dict, b_dict):
     '''
