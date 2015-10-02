@@ -5,6 +5,7 @@ from fast_rcnn.test import im_detect
 from utils.cython_nms import nms
 from utils.timer import Timer
 import matplotlib.pyplot as plt
+import time
 import numpy as np
 import scipy.io as sio
 import caffe, os, sys, cv2
@@ -46,9 +47,9 @@ def load_proposal(proposal_path):
     proposals = []
     with open(proposal_path) as fh:
         for lid, line in enumerate(fh.read().split('\n')):
-            if lid == 0:
+            if lid == 0 or len(line) < 2:
                 continue
-            segs = line.split('')
+            segs = line.split(' ')
             x1 = float(segs[0])
             y1 = float(segs[1])
             w = float(segs[2])
@@ -59,7 +60,7 @@ def load_proposal(proposal_path):
         
     return np.array(proposals)
 
-def Detect(net, image_path, proposal_path):
+def Detect_proposals(net, image_path, proposal_path):
     
     """Detect object classes in an image assuming the whole image is an object."""
     # Load the image
@@ -72,7 +73,7 @@ def Detect(net, image_path, proposal_path):
     # Detect all object classes and regress object bounds
     timer = Timer()
     timer.tic()
-    scores, boxes = im_detect(net, im, proposals))
+    scores, boxes = im_detect(net, im, proposals)
     timer.toc()
 
     #
@@ -81,7 +82,7 @@ def Detect(net, image_path, proposal_path):
     img_blob['pred'] = []
     CONF_THRESH = 0.005
     NMS_THRESH = 0.3 
-    for cls in classes:
+    for cls in CLASSES:
         if cls == '__background__':
             continue
         cls_ind = CLASSES.index(cls) 
@@ -110,7 +111,6 @@ def Detect(net, image_path, proposal_path):
 
     return img_blob
 
-
 def Detect(net, image_path):
     
     """Detect object classes in an image assuming the whole image is an object."""
@@ -135,7 +135,6 @@ def Detect(net, image_path):
     img_blob['rcnn_time'] = timer.total_time
 
     return img_blob
-
 
 def loadKeyFrames(video_name):
 
@@ -205,8 +204,8 @@ if __name__ == '__main__':
             frame_path = os.path.join(frame_folder, frame_name)
             proposal_path = os.path.join('/mnt/tags/edgebox-all', video_name, frame_name.split('.')[0] + '.bbx')
      
-            if os.path.exists(proposal_path): 
-                img_blob = Detect(net, frame_path, os.path.join('/mnt/tags/edgebox-all')) 
+            if os.path.exists(proposal_path) and time.time() > os.path.getmtime(proposal_path) + 5: 
+                img_blob = Detect_proposals(net, frame_path, proposal_path) 
                 blob['imgblobs'] += [img_blob]
 
         #blob['imgblobs'] = blob['imgblobs'] + _rcnn_data
