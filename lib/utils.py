@@ -181,6 +181,20 @@ def loadKeyFrames(video_name):
 
     return keyframe_filenames
 
+def load_all(video_name):
+   
+    if not os.path.exists(os.path.join('/mnt/tags/rcnn-info-all', video_name + '_rcnnrecog.json')) or not os.path.exists(os.path.join('/mnt/tags/vgg-classify-all', video_name + '_recog.json')) or not os.path.exists(os.path.join('/mnt/tags/msr-caption-all', video_name + '_msrcap.json')) or not os.path.exists(os.path.join('/mnt/tags/fei-caption-all', video_name + '_5_caption.json')) or not os.path.exists(os.path.join('/mnt/tags/rcnn-bbx-tmp', video_name + '_rcnnbbx.json')):
+        return None, None, None, None, None
+
+    rcnn_data = load_video_rcnn('/mnt/tags/rcnn-info-all', video_name)
+    vgg_data = load_video_recog('/mnt/tags/vgg-classify-all', video_name)
+    fei_caption_data = load_video_caption('/mnt/tags/fei-caption-all', video_name)
+    msr_cap_data = load_video_msr_caption('/mnt/tags/msr-caption-all', video_name)
+    rcnn_bbx = load_video_rcnn_bbx('/mnt/tags/rcnn-bbx-tmp', video_name) 
+
+    return rcnn_data, vgg_data, fei_caption_data, msr_cap_data, rcnn_bbx
+    
+
 def load_all_labels(video_name):
 
     rcnn_data = load_video_rcnn('/mnt/tags/rcnn-info-all', video_name)
