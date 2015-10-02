@@ -67,9 +67,15 @@ def Detect_proposals(net, image_path, proposal_path):
     im = cv2.imread(image_path)
     h, w, c = im.shape
     
+    img_blob = {}
+    img_blob['img_path'] = image_path
+    img_blob['pred'] = []
     # Load proposals
     proposals = load_proposal(proposal_path)    
-     
+    if len(proposals) == 0:
+        img_blob['rcnn_time'] = 0
+        return img_blob        
+ 
     # Detect all object classes and regress object bounds
     timer = Timer()
     timer.tic()
@@ -77,9 +83,6 @@ def Detect_proposals(net, image_path, proposal_path):
     timer.toc()
 
     #
-    img_blob = {}
-    img_blob['img_path'] = image_path
-    img_blob['pred'] = []
     CONF_THRESH = 0.005
     NMS_THRESH = 0.3 
     for cls in CLASSES:
