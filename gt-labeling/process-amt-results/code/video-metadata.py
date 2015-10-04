@@ -4,7 +4,7 @@ import pickle
 if __name__ == "__main__":
 
     VIDEO_LIST = '/mnt/video_list.txt'
-    METADATA_FOLDER = '/mnt/video-metadata'
+    METADATA_FOLDER = '/mnt/tags/video-metadata'
     videos = open(VIDEO_LIST).read().split()
 
     for vid, video_name in enumerate(videos):
