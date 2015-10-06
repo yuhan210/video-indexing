@@ -26,7 +26,7 @@ def getSobel(img, k_size = 3):
     dst = cv2.addWeighted(abs_grad_x,0.5,abs_grad_y,0.5,0)
     #dst = cv2.add(abs_grad_x,abs_grad_y)
 
-    return dst
+    return dst.mean()
 
 def getIlluminance(img):
 
