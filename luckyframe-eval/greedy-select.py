@@ -2,6 +2,7 @@ from nltk.corpus import stopwords
 import scipy.spatial.distance
 import numpy as np
 import operator
+import pickle
 import shutil
 import math
 import time
@@ -98,6 +99,7 @@ def get_combined_tfs(tfs_dict):
             else:
                 combined_tfs[w] += 1
 
+    #combined_tfs = keep_nouns(combined_tfs)
     return combined_tfs
 
 '''
@@ -205,77 +207,6 @@ def composeVGGWordnet(w, wordnet_tree_path = 'new_synset_word.txt'):
      
 
 #def weighted_combine_models(video_name, selected_frames, _vgg_data, _msr_data, _rcnn_data, _fei_data):
-
-def combine_all_models(video_name, _vgg_data, _msr_data, _rcnn_data, _fei_data):
-
-    tf_list = []
-    assert(len(_vgg_data) == len(_msr_data))
-    assert(len(_rcnn_data) == len(_fei_data))
-    assert(len(_vgg_data) == len(_fei_data))
-
-    for fid in xrange(len(_vgg_data)):
-
-        rcnn_data = _rcnn_data[fid]
-        vgg_data = _vgg_data[fid]
-        msr_data = _msr_data[fid]
-        fei_data = _fei_data[fid]
-   
-        frame_name = rcnn_data['image_path'].split('/')[-1]
-        assert(rcnn_data['image_path'] == vgg_data['img_path'])
-        assert(rcnn_data['image_path'] == msr_data['img_path'])
-        assert(rcnn_data['image_path'] == fei_data['img_path'])
-
-        # combine words
-        rcnn_ws = []
-        if len(rcnn_data) > 0:
-            for rcnn_idx, pred in enumerate(rcnn_data['pred']['text']):
-                ## the confidence is higher than 10^(-3) and is not background
-                if rcnn_data['pred']['conf'][rcnn_idx] > 0.0005 and pred.find('background') < 0:
-                    rcnn_ws += [pred]
- 
-        vgg_ws = []
-        if len(vgg_data) > 0:        
-            vgg_ws = [w for w in vgg_data['pred']['text']]
-    
-        fei_ws = [] 
-        if len(fei_data) > 0:
-            fei_ws = removeStopWords(fei_data['candidate']['text'])
-    
-        msr_ws = [] 
-        if len(msr_data) > 0:
-            msr_ws = removeStopWordsFromWordlist(msr_data['words']['text'])
-
-        words = {}
-        for w in rcnn_ws:
-            if w not in words:
-                words[w] = 1
-            else:
-                words[w] += 1
-        for w in vgg_ws:
-            w = composeVGGWordnet(w)
-            w = w.split('->')[-1] 
-            if w not in words:
-                words[w] = 1
-            else:
-                words[w] += 1
-        
-        for w in fei_ws:
-            if w not in words:
-                words[w] = 1
-            else:
-                words[w] += 1
-    
-        for w_idx, w in enumerate(msr_data['words']['text']):
-            if w not in STOPWORDS and w.find('background') < 0:
-                if w not in words:
-                    words[w] = 1
-                else:
-                    words[w] += 1
-
-        tf_list += [{'frame_name': frame_name, 'tf': words}]
-
-    return tf_list
-
 
 def subsample_tf_list(selected_frames, all_tf_list):
    
@@ -502,18 +433,20 @@ if __name__ == "__main__":
 
     fh = open('./sample_log.txt', 'w') 
     for video_name in videos:
-        
+       
+ 
         if not os.path.exists(os.path.join('/mnt/tags/rcnn-info-all', video_name + '_rcnnrecog.json')) or not os.path.exists(os.path.join('/mnt/tags/vgg-classify-all', video_name + '_recog.json')) or not os.path.exists(os.path.join('/mnt/tags/msr-caption-all', video_name + '_msrcap.json')) or not os.path.exists(os.path.join('/mnt/tags/fei-caption-all', video_name + '_5_caption.json')):
             continue
       
         print video_name
-        
+
         # load tags from all DNN modules 
         _vgg_data = load_video_recog('/mnt/tags/vgg-classify-all', video_name)
         _fei_caption_data = load_video_caption('/mnt/tags/fei-caption-all', video_name)
         _msr_cap_data = load_video_msr_caption('/mnt/tags/msr-caption-all', video_name)
         _rcnn_data = load_video_rcnn('/mnt/tags/rcnn-info-all', video_name)
-      
+     
+        _turker_data = load_video_processed_turker(video_name)
  
         # compose video term freq (a list of dicts)
         frame_names = os.listdir(os.path.join('/mnt/frames', video_name))
@@ -529,9 +462,10 @@ if __name__ == "__main__":
         cur_tfs_list = [all_tfs_list[0]]
         detailed_values = []
         detailed_picked_fid = [0]
-
+        prev_bad_frame = False
+ 
         while True:
-            if end_idx == len(all_tfs_list):
+            if end_idx >= len(all_tfs_list):
                 break
        
             gt_tfs_list = all_tfs_list[start_idx : end_idx + 1]
@@ -543,20 +477,52 @@ if __name__ == "__main__":
               
             detailed_values += [detailed_m]
 
-            if detailed_m < DETAIL_THRESHOLD and (end_idx + hysteresis_num) < len(all_tfs_list):
+            if detailed_m < DETAIL_THRESHOLD: #and (end_idx + hysteresis_num) < len(all_tfs_list): # taking min(+hysteresis_num, good frames)
 
                 # eat some hysteresis frames
                 for i in xrange(hysteresis_num):
                      
-                    end_idx += 1 
+                    end_idx += 1
+                    if end_idx >= len(all_tfs_list):
+                        break
+
                     gt_tfs_list = all_tfs_list[start_idx : end_idx + 1]
                     gt_tf = get_combined_tfs(gt_tfs_list)
 
                     if i == hysteresis_num - 1:
-                        detailed_picked_fid += [end_idx] 
-                        cur_tfs_list = [all_tfs_list[end_idx]]
-                        cur_tf = get_combined_tfs(cur_tfs_list)
-                        start_idx = end_idx
+
+                        if prev_bad_frame == False:
+                             
+                            detailed_picked_fid += [end_idx] 
+                            cur_tfs_list = [all_tfs_list[end_idx]]
+                            cur_tf = get_combined_tfs(cur_tfs_list)
+                            start_idx = end_idx
+
+                            if isbadframe(_turker_data, all_tfs_list[end_idx]):
+                                prev_bad_frame = True
+                        else: 
+                            # eat bad frames
+                            while True:
+
+                                if end_idx >= len(all_tfs_list):
+                                    break
+
+                                if isbadframe(_turker_data, all_tfs_list[end_idx]):
+                                
+                                    gt_tfs_list = all_tfs_list[start_idx : end_idx + 1]
+                                    gt_tf = get_combined_tfs(gt_tfs_list)
+                                    detailed_m = detailed_measure(gt_tf, cur_tf)
+                                    detailed_values += [detailed_m]
+                                    end_idx += 1
+                                else:
+                                    # pick the frame
+                                    detailed_picked_fid += [end_idx] 
+                                    cur_tfs_list = [all_tfs_list[end_idx]]
+                                    cur_tf = get_combined_tfs(cur_tfs_list)
+                                    start_idx = end_idx
+                                    prev_bad_frame = False
+                                    break
+                        
                         gt_tfs_list = all_tfs_list[start_idx : end_idx + 1]
                         gt_tf = get_combined_tfs(gt_tfs_list)
                     
@@ -565,8 +531,12 @@ if __name__ == "__main__":
 
             end_idx += 1 
         print len(detailed_picked_fid) 
+
+        with open(os.path.join('greedy-log', video_name + '_gtframe.pickle'), 'wb') as gt_fh:
+            gt_fh({'picked_f': detailed_picked_fid, 'total_frame': len(all_tfs_list), 'picked_rate': len(detailed_picked_fid)/(len(all_tfs_list) * 1.0), gt_fh)
    
         # All histogram correlation       
+        '''
         CORRE_THRESHOLD = 0.87
         start_idx = 0
         end_idx = 0
@@ -608,7 +578,7 @@ if __name__ == "__main__":
                     
             end_idx += 1 
         print len(hist_measure_picked_fid) 
-
+        '''
         '''
         # Timeliness correlation
         T_CORRE_THRESHOLD = 0.9
@@ -675,13 +645,13 @@ if __name__ == "__main__":
         print len(top_k_picked_fid) 
         '''
 
-        store_keyframes(video_name, detailed_picked_fid, os.path.join('./keyframes', video_name, 'detailed'))
-        store_keyframes(video_name, hist_measure_picked_fid, os.path.join('./keyframes', video_name, 'hist_measure'))
+        #store_keyframes(video_name, detailed_picked_fid, os.path.join('./keyframes', video_name, 'detailed'))
+        #store_keyframes(video_name, hist_measure_picked_fid, os.path.join('./keyframes', video_name, 'hist_measure'))
 
         fh.write(video_name + '\n')
         fh.write('Detailed:' + str(len(detailed_picked_fid)/(len(detailed_values) * 1.0)) + '\n')
-        fh.write('Hist:' + str(len(hist_measure_picked_fid)/(len(detailed_values) * 1.0)) + '\n\n')
-        '''
+        #fh.write('Hist:' + str(len(hist_measure_picked_fid)/(len(detailed_values) * 1.0)) + '\n\n')
+        
         fig = plt.figure(1)
         ax = fig.add_subplot(111)
         ax.set_title('# subsampled distinct word/# nonsubsampled distinct word (bigger -> more similar)')
@@ -693,7 +663,8 @@ if __name__ == "__main__":
         ax.set_xlabel('Frame ID')
         ax.set_ylabel('# subsampled distinct word/# nonsubsampled distinct word')
         ax.set_ylim([0,1]) 
- 
+        plt.show()
+        '''
         fig = plt.figure(2)
         ax = fig.add_subplot(111) 
         ax.set_title('Histogram Correlation (bigger -> more similar)')
@@ -705,8 +676,7 @@ if __name__ == "__main__":
         ax.set_xlabel('Frame ID')
         ax.set_ylabel('Histogram Correlation')
         ax.set_ylim([0,1]) 
-        '''
-        
+        ''' 
         ''' 
         plt.figure(3) 
         plt.title('5-sec Histogram Correlation (bigger -> more similar)')
