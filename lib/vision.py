@@ -26,6 +26,15 @@ def getSobel(img, k_size = 3):
     dst = cv2.addWeighted(abs_grad_x,0.5,abs_grad_y,0.5,0)
     #dst = cv2.add(abs_grad_x,abs_grad_y)
 
+    return dst
+
+def getIlluminance(img):
+
+    img_out = cv2.cvtColor(img, cv2.COLOR_BGR2YUV)
+    y,u,v = cv2.split(img_out) 
+    ave_lum = np.mean(y)
+    
+    return ave_lun
 
 def phash(a, b):
     a_hash = imagehash.phash(a)
