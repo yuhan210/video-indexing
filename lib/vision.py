@@ -34,7 +34,7 @@ def getIlluminance(img):
     y,u,v = cv2.split(img_out) 
     ave_lum = np.mean(y)
     
-    return ave_lun
+    return ave_lum
 
 def phash(a, b):
     a_hash = imagehash.phash(a)
