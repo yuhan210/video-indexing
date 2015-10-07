@@ -431,9 +431,10 @@ if __name__ == "__main__":
     VIDEO_LIST = '/mnt/video_list.txt'
     videos = open(VIDEO_LIST).read().split()
 
-    fh = open('./sample_log.txt', 'w') 
-    for video_name in videos:
-       
+    for vid, video_name in enumerate(videos):
+        
+        if vid == 250:
+            break 
  
         if not os.path.exists(os.path.join('/mnt/tags/rcnn-info-all', video_name + '_rcnnrecog.json')) or not os.path.exists(os.path.join('/mnt/tags/vgg-classify-all', video_name + '_recog.json')) or not os.path.exists(os.path.join('/mnt/tags/msr-caption-all', video_name + '_msrcap.json')) or not os.path.exists(os.path.join('/mnt/tags/fei-caption-all', video_name + '_5_caption.json')):
             continue
@@ -456,7 +457,7 @@ if __name__ == "__main__":
    
         hysteresis_num = 2
         # All detailed measure 
-        DETAIL_THRESHOLD = 0.4
+        DETAIL_THRESHOLD = 0.3
         start_idx = 0
         end_idx = 0
         cur_tfs_list = [all_tfs_list[0]]
@@ -532,8 +533,8 @@ if __name__ == "__main__":
             end_idx += 1 
         print len(detailed_picked_fid) 
 
-        with open(os.path.join('greedy-log', video_name + '_gtframe.pickle'), 'wb') as gt_fh:
-            gt_fh({'picked_f': detailed_picked_fid, 'total_frame': len(all_tfs_list), 'picked_rate': len(detailed_picked_fid)/(len(all_tfs_list) * 1.0), gt_fh)
+        with open(os.path.join('greedy-log', video_name + '_' + str(DETAIL_THRESHOLD)  + '_gtframe.pickle'), 'wb') as gt_fh:
+            pickle.dump({'picked_f': detailed_picked_fid, 'total_frame': len(all_tfs_list), 'picked_rate': len(detailed_picked_fid)/(len(all_tfs_list) * 1.0)}, gt_fh)
    
         # All histogram correlation       
         '''
@@ -647,11 +648,7 @@ if __name__ == "__main__":
 
         #store_keyframes(video_name, detailed_picked_fid, os.path.join('./keyframes', video_name, 'detailed'))
         #store_keyframes(video_name, hist_measure_picked_fid, os.path.join('./keyframes', video_name, 'hist_measure'))
-
-        fh.write(video_name + '\n')
-        fh.write('Detailed:' + str(len(detailed_picked_fid)/(len(detailed_values) * 1.0)) + '\n')
-        #fh.write('Hist:' + str(len(hist_measure_picked_fid)/(len(detailed_values) * 1.0)) + '\n\n')
-        
+        '''        
         fig = plt.figure(1)
         ax = fig.add_subplot(111)
         ax.set_title('# subsampled distinct word/# nonsubsampled distinct word (bigger -> more similar)')
@@ -664,7 +661,7 @@ if __name__ == "__main__":
         ax.set_ylabel('# subsampled distinct word/# nonsubsampled distinct word')
         ax.set_ylim([0,1]) 
         plt.show()
-        '''
+
         fig = plt.figure(2)
         ax = fig.add_subplot(111) 
         ax.set_title('Histogram Correlation (bigger -> more similar)')
@@ -676,8 +673,7 @@ if __name__ == "__main__":
         ax.set_xlabel('Frame ID')
         ax.set_ylabel('Histogram Correlation')
         ax.set_ylim([0,1]) 
-        ''' 
-        ''' 
+ 
         plt.figure(3) 
         plt.title('5-sec Histogram Correlation (bigger -> more similar)')
         plt.plot(range(len(t_hist_measures)), t_hist_measures) 
@@ -736,4 +732,3 @@ if __name__ == "__main__":
         #
                 
                
-    fh.close() 
