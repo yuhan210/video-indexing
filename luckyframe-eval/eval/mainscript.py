@@ -1,9 +1,19 @@
 from utils import *
 from mapk import *
 from ndcg import *
+import numpy as np
 import scipy.stats as stats
 import operator
 import pickle
+import matplotlib
+import matplotlib.pyplot as plt
+try:
+    plt.style.use('ggplot')
+except:
+    pass
+
+COSSIM_THRESH = 0.05
+
 
 def load():
     
@@ -28,7 +38,7 @@ def load():
         rcnn[video_name] = _rcnn_data
         turker_labels[video_name] = _turker_data
 
-        if vid == 250:
+        if vid == 20:
             break
     return vgg, fei_cap, msr_cap, rcnn, turker_labels
 
@@ -89,6 +99,7 @@ def get_turker_subsampled_tf(video_name, turker_data, in_range_fids):
     return turker_tf 
 
 def get_subsampled_tf(video_name, vgg_data, msr_data, rcnn_data, fei_data, in_range_fids):
+
     s_vgg_data = []
     s_fei_data = []
     s_msr_data = []
@@ -107,16 +118,17 @@ def get_subsampled_tf(video_name, vgg_data, msr_data, rcnn_data, fei_data, in_ra
     return s_tf
 
 
-def reindexing(gt_video_rank, test_video_rank):
+def reindexing(gt_video_rank, test_video_rank, score_thresh):
     """
     Indexing ranked video list using ground-truth video ranking
     """ 
+
     gt_rank = []
     k = 0
     for tid, tup in enumerate(gt_video_rank):
         video_name = tup[0]
         score = tup[1]
-        if score > 0.0:
+        if score > score_thresh:
             k += 1
         gt_rank += [video_name] 
      
@@ -128,6 +140,7 @@ def reindexing(gt_video_rank, test_video_rank):
 
     return test_rank, k
 
+
 # TODO: only consider score > 0
 def kendall_correlation(gt_video_rank, test_video_rank):
   
@@ -137,7 +150,67 @@ def kendall_correlation(gt_video_rank, test_video_rank):
     return tau, p_value 
       
 
- 
+def plot_rank_debug(gt_rank, gt_tfs, test_tfs, video_rank, query_str, test_scheme_name = "groundtruth"):
+    
+    fig = plt.figure()
+    fig.suptitle(test_scheme_name + ' query:' + query_str)
+    for rank, tup in enumerate(gt_rank):
+        video_name = tup[0]
+        score = tup[1] 
+       
+        # get test tf
+        tf = filter(lambda x: x['video_name'] == video_name, test_tfs)[0]['tf']
+        deno = sum([tf[x] for x in tf]) * 1.0
+        # get gt tf
+        gt_tf = filter(lambda x:x['video_name'] == video_name, gt_tfs)[0]['tf']
+        gt_deno = sum([gt_tf[x] for x in gt_tf]) * 1.0
+
+        gt_x = gt_tf.keys()         
+        # align test tf based on gt tf
+        x = []
+        y = []
+        gt_y = []
+        
+        query_point = (-1,-1) 
+        gt_query_point = (-1,-1) 
+        for xidx, key in enumerate(gt_x):
+            x += [key]
+            gt_y += [gt_tf[key]/gt_deno]
+
+            if key in tf:
+                y += [tf[key]/deno] 
+                if key == query_str.split('-')[0]:
+                    query_point = (xidx, tf[key]/deno) 
+                    gt_query_point = (xidx, gt_tf[key]/gt_deno) 
+            else:
+                y += [0]
+
+        for key in tf:
+            if key not in x:
+                x += [key]
+                y += [tf[key]/deno]
+
+        # get test video rank
+        t_rank = -1
+        t_score = -1
+        for trank, ttup in enumerate(video_rank):
+            if ttup[0] == video_name:
+                t_rank = trank
+                t_score = ttup[1]
+                break 
+
+        ax = plt.subplot(len(gt_rank)/5,  5, rank+1)
+        ax.plot( range(len(x)), y, color = 'blue', alpha = 0.7, label = test_scheme_name ) 
+        ax.plot( range(len(gt_x)), gt_y, color = 'red', alpha = 0.7, label = "groundtruth")
+        if query_point[0] != -1:
+            ax.scatter(query_point[0], query_point[1], color = 'blue', marker = (5,1)) 
+        if gt_query_point[0] != -1:
+            ax.scatter(gt_query_point[0], gt_query_point[1], color = 'red', marker = (5,1)) 
+        ax.set_title(video_name[3:13] + ' r:' + str(t_rank) + ' s:' + str(t_score) )
+        ax.legend()
+    plt.show()
+
+
 def run(vgg, fei, msr, rcnn, turker_labels):
     SERVER_STORAGE_FRAMES = 5 * 30 # 5 sec * 30 fps
 
@@ -151,7 +224,7 @@ def run(vgg, fei, msr, rcnn, turker_labels):
     ## Modify ##
     greedy_folder = '/home/t-yuche/luckyframe-eval/greedy-log'
     ##    
-
+    query_dcgs = {'uniform': [], 'greedy': []}
     server_storage = []
     for query_str in queries:
         query = query_str.split('-')[0]
@@ -174,13 +247,14 @@ def run(vgg, fei, msr, rcnn, turker_labels):
             turker_data = turker_labels[video_name]
 
             # load greedy subsampled frames
-            greedy_gt_path = os.path.join(greedy_folder, video_name +  '_gtframe.pickle')
+            greedy_gt_path = os.path.join(greedy_folder, video_name +  '_0.4_gtframe.pickle')
             with open(greedy_gt_path) as gt_fh:
                 selected_frame_obj = pickle.load(gt_fh)
                 greedy_frames = [ str(x) + '.jpg' for x in selected_frame_obj['picked_f']]
                 video_len_f = selected_frame_obj['total_frame']
                 subsampled_rate = selected_frame_obj['picked_rate']
-                 
+            
+             
             # baseline
             uniform_frames = naive_subsample_frames(os.listdir(os.path.join('/mnt/frames', video_name)), subsampled_rate) 
            
@@ -194,7 +268,7 @@ def run(vgg, fei, msr, rcnn, turker_labels):
             video_start_fid = int((video_len_f/10.0) * hash_val)
             video_end_fid = min(video_start_fid + SERVER_STORAGE_FRAMES, video_len_f - 1)
 
-            #print video_start_fid, video_end_fid
+            print video_name, video_start_fid, video_end_fid
         
             '''       
             ## Turker labeled frames ## 
@@ -217,7 +291,8 @@ def run(vgg, fei, msr, rcnn, turker_labels):
             tf_list = combine_all_models(video_name, _vgg_data, _msr_data, _rcnn_data, _fei_data)
             tf = get_combined_tfs(tf_list)
             n_video_tfs += [{'video_name': video_name, 'tf': tf}]
-    
+            #print n_video_tfs
+              
             '''
             ## Baseline -- uniformly subsampled video ## 
             '''
@@ -231,55 +306,64 @@ def run(vgg, fei, msr, rcnn, turker_labels):
             '''
             greedy_range_fids = get_inrange_fids(video_start_fid, video_end_fid, greedy_frames)
             #print 'greedy frames', greedy_frames
-            #print 'greedy range fids', greedy_range_fids
+            print 'greedy range fids', greedy_range_fids
             greedy_tf = get_subsampled_tf(video_name, vgg_data, msr_data, rcnn_data, fei_data, greedy_range_fids)
             greedy_video_tfs += [{'video_name': video_name, 'tf': greedy_tf}]
-
+            #print greedy_video_tfs
 
         # ranking for a given query
         n_video_rank = rank(query, n_video_tfs)
         uni_video_rank = rank(query, uni_video_tfs) 
         greedy_video_rank = rank(query, greedy_video_tfs)
-        print turker_video_tfs
+        #print turker_video_tfs
         turker_video_rank = rank(query, turker_video_tfs) 
 
-        rn_video_rank, k = reindexing(n_video_rank, n_video_rank)
-        runi_video_rank, k  = reindexing(n_video_rank, uni_video_rank)
-        rgreedy_video_rank, k = reindexing(n_video_rank, greedy_video_rank)
-        rturker_video_rank = reindexing(n_video_rank, turker_video_rank)
+        rn_video_rank, k = reindexing(n_video_rank, n_video_rank, COSSIM_THRESH)
+        runi_video_rank, k  = reindexing(n_video_rank, uni_video_rank, COSSIM_THRESH)
+        rgreedy_video_rank, k = reindexing(n_video_rank, greedy_video_rank, COSSIM_THRESH)
+        rturker_video_rank = reindexing(n_video_rank, turker_video_rank, COSSIM_THRESH)
         
-        video_rel = get_video_rel(n_video_rank)    
-        gt_dcg = dcg(video_rel, n_video_rank)
+        video_rel = get_video_rel(n_video_rank, COSSIM_THRESH)    
+        gt_dcg = dcg(video_rel, n_video_rank, COSSIM_THRESH)
 
-        turker_video_rel = get_video_rel(turker_video_rank)
-        turker_dcg = dcg(turker_video_rel, turker_video_rank)
+        turker_video_rel = get_video_rel(turker_video_rank, COSSIM_THRESH)
+        turker_dcg = dcg(turker_video_rel, turker_video_rank, COSSIM_THRESH)
         #print 'gt_dcg', gt_dcg
  
         #print n_video_rank
         #print rn_video_rank
         #print rn_video_rank
         print '\n--------- Query', query_str, '-------'
-        #print 'Ground-truth'
+        print 'Ground-truth'
+        print n_video_rank 
         #print 'kendall tau:', kendall_correlation(rn_video_rank, rn_video_rank)
         #print 'APK:', apk(rn_video_rank, rn_video_rank, k)
-        #print 'dcg:', dcg(video_rel, n_video_rank)/gt_dcg
+        print 'dcg:', dcg(video_rel, n_video_rank, COSSIM_THRESH)/gt_dcg
 
         
         #print uni_video_rank
         #print rn_video_rank
-        #print runi_video_rank
+        print runi_video_rank
         print '\nUniform'
-        print 'kendall tau:', kendall_correlation(rn_video_rank, runi_video_rank)
-        print 'APK:', apk(rn_video_rank, runi_video_rank, k)
-        print 'dcg:', dcg(video_rel, uni_video_rank)/gt_dcg
-        #print 'dcg (relative to turker):', dcg(turker_video_rel, uni_video_rank)/turker_dcg
+        #print 'kendall tau:', kendall_correlation(rn_video_rank, runi_video_rank)
+        #print 'APK:', apk(rn_video_rank, runi_video_rank, k)
+        uni_dcg =  dcg(video_rel, uni_video_rank, COSSIM_THRESH)/gt_dcg
+        print 'dcg:', uni_dcg
+        query_dcgs['uniform'] += [uni_dcg]
 
         #print greedy_video_rank
         #print rn_video_rank
-        #print rgreedy_video_rank
-
+        print rgreedy_video_rank
         print '\nGreedy'
-        print 'kendall tau:', kendall_correlation(rn_video_rank, rgreedy_video_rank)
-        print 'APK:', apk(rn_video_rank, rgreedy_video_rank, k)
-        print 'dcg:', dcg(video_rel, greedy_video_rank)/gt_dcg
-        #print 'dcg (relative to turker):', dcg(turker_video_rel, greedy_video_rank)/turker_dcg
+        #print 'kendall tau:', kendall_correlation(rn_video_rank, rgreedy_video_rank)
+        #print 'APK:', apk(rn_video_rank, rgreedy_video_rank, k)
+        greedy_dcg = dcg(video_rel, greedy_video_rank, COSSIM_THRESH)/gt_dcg
+        print 'dcg:', greedy_dcg
+        query_dcgs['greedy'] += [greedy_dcg]
+
+        
+        #plot_rank_debug(n_video_rank, n_video_tfs, uni_video_tfs, uni_video_rank, query_str, test_scheme_name = "uniform")
+        #plot_rank_debug(n_video_rank, n_video_tfs, greedy_video_tfs, greedy_video_rank, query_str, test_scheme_name = "greedy")
+    print '' 
+    print 'Unifrom:', np.mean(query_dcgs['uniform']), np.std(query_dcgs['uniform'])
+    print 'Greedy:', np.mean(query_dcgs['greedy']), np.std(query_dcgs['greedy'])
