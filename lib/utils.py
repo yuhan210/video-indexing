@@ -1,4 +1,5 @@
 from nltk.stem.wordnet import WordNetLemmatizer
+from nltk.tag import pos_tag
 from nlp import *
 from wordnet import *
 import inflection 
@@ -7,6 +8,72 @@ import json
 import nltk
 import csv
 import os
+
+
+BAD_WORDS = ['none', 'blurry', 'dark']
+
+def naive_subsample_frames(all_frames, FRAME_RETAIN_RATE):
+
+    all_frames = sorted(all_frames, key=lambda x: int(x.split('.')[0]))
+    n_picked_frames = len(all_frames) * FRAME_RETAIN_RATE
+    step = n_picked_frames/((len(all_frames) ) * 1.0)
+    track = 0
+    counter = 0
+    retained_frames = [] 
+    for idx, frame_name in enumerate(all_frames):
+        if int(track) == counter:
+            retained_frames += [frame_name]
+            counter += 1
+        track += step
+
+    retained_frames = sorted(retained_frames, key=lambda x: int(x.split('.')[0]))
+    return retained_frames
+
+
+def keep_nouns(tf):
+    n_tf = {}
+    for k in tf:
+        if pos_tag([k])[0][1].find('N') == 0:
+            n_tf[k] = tf[k]
+
+    return n_tf 
+
+def isbadframe(_turker_data, tfs_obj):
+    # tfs_obj = {'frame_name': , 'tf':}
+    # _turker_data [{"gt_labels": [], "frame_name": "0.jpg"}, {"gt_labels": ["street sign", "sign"], "frame_name": "30.jpg"}]
+
+    frame_name = tfs_obj['frame_name']
+    tf = tfs_obj['tf']
+    #  first check if it is a turker labeled frame 
+    for turker_obj in _turker_data:
+        if turker_obj['frame_name'] == frame_name:
+            if turker_isbadframe(turker_obj['gt_labels']):
+                return True
+     
+    # idenitify bad frame based on some heuristics
+    # TODO: think deeper about it
+    for w in tf: 
+        if w in BAD_WORDS:
+            return True
+
+    return False
+
+def turker_isbadframe(gt_labels): 
+    # only work for turker labled frames
+     
+    for bw in BAD_WORDS:
+        if bw in gt_labels:
+            return True
+   
+    stop_words = get_stopwords() 
+    for sw in stop_words:
+        if sw in gt_labels:
+            gt_labels.remove(sw) 
+    
+    if len(gt_labels) == 0:
+        return True
+
+    return False
 
 def load_video_rcnn_bbx(rcnn_bbx_folder, video_name):
 
@@ -27,7 +94,6 @@ def cos_similarty(a_dict, b_dict):
     '''   
  
     space = list(set(a_dict.keys()) | set(b_dict.keys()))
-    
     # compute consine similarity (a dot b/ ||a|| * ||b||)
     sumab = 0.0
     sumaa = 0.0
@@ -45,23 +111,9 @@ def cos_similarty(a_dict, b_dict):
         sumab += a * b
         sumaa += a * a
         sumbb += b * b        
-    
+   
     return sumab/(math.sqrt(sumaa) * math.sqrt(sumbb))
  
-def naive_subsample_frames(all_frames, FRAME_RETAIN_RATE):
-
-    n_picked_frames = len(all_frames) * FRAME_RETAIN_RATE
-    step = n_picked_frames/((len(all_frames) ) * 1.0)
-    track = 0
-    counter = 0
-    retained_frames = [] 
-    for idx, frame_name in enumerate(all_frames):
-        if int(track) == counter:
-            retained_frames += [frame_name]
-            counter += 1
-        track += step
-
-    return retained_frames
 
 
 def get_combined_tfs(tfs_dict):
@@ -80,6 +132,7 @@ def combine_all_models(video_name, _vgg_data, _msr_data, _rcnn_data, _fei_data):
 
     stop_words = get_stopwords()
     wptospd = word_pref_to_stopword_pref_dict()
+    convert_dict = convert_to_equal_word()
 
     tf_list = []
     assert(len(_vgg_data) == len(_msr_data))
@@ -134,7 +187,10 @@ def combine_all_models(video_name, _vgg_data, _msr_data, _rcnn_data, _fei_data):
             else:
                 words[w] += 1
         for w in vgg_ws:
-            w = wptospd[w] 
+            
+            w = wptospd[w]
+            if w in convert_dict:
+                w = convert_dict[w]
             if w not in words:
                 words[w] = 1
             else:
@@ -151,6 +207,9 @@ def combine_all_models(video_name, _vgg_data, _msr_data, _rcnn_data, _fei_data):
                 words[w] = 1
             else:
                 words[w] += 1
+
+        if '' in words:
+            words.pop('', None)
 
         tf_list += [{'frame_name': frame_name, 'tf': words}]
 
@@ -181,18 +240,20 @@ def loadKeyFrames(video_name):
 
     return keyframe_filenames
 
-def load_all(video_name):
+
+#TODO: also load rcnn bbx
+def load_all_modules(video_name):
    
-    if not os.path.exists(os.path.join('/mnt/tags/rcnn-info-all', video_name + '_rcnnrecog.json')) or not os.path.exists(os.path.join('/mnt/tags/vgg-classify-all', video_name + '_recog.json')) or not os.path.exists(os.path.join('/mnt/tags/msr-caption-all', video_name + '_msrcap.json')) or not os.path.exists(os.path.join('/mnt/tags/fei-caption-all', video_name + '_5_caption.json')) or not os.path.exists(os.path.join('/mnt/tags/rcnn-bbx-tmp', video_name + '_rcnnbbx.json')):
+    if not os.path.exists(os.path.join('/mnt/tags/rcnn-info-all', video_name + '_rcnnrecog.json')) or not os.path.exists(os.path.join('/mnt/tags/vgg-classify-all', video_name + '_recog.json')) or not os.path.exists(os.path.join('/mnt/tags/msr-caption-all', video_name + '_msrcap.json')) or not os.path.exists(os.path.join('/mnt/tags/fei-caption-all', video_name + '_5_caption.json')): #or not os.path.exists(os.path.join('/mnt/tags/rcnn-bbx-tmp', video_name + '_rcnnbbx.json')):
         return None, None, None, None, None
 
     rcnn_data = load_video_rcnn('/mnt/tags/rcnn-info-all', video_name)
     vgg_data = load_video_recog('/mnt/tags/vgg-classify-all', video_name)
     fei_caption_data = load_video_caption('/mnt/tags/fei-caption-all', video_name)
     msr_cap_data = load_video_msr_caption('/mnt/tags/msr-caption-all', video_name)
-    rcnn_bbx = load_video_rcnn_bbx('/mnt/tags/rcnn-bbx-tmp', video_name) 
+    #rcnn_bbx = load_video_rcnn_bbx('/mnt/tags/rcnn-bbx-tmp', video_name) 
 
-    return rcnn_data, vgg_data, fei_caption_data, msr_cap_data, rcnn_bbx
+    return rcnn_data, vgg_data, fei_caption_data, msr_cap_data, None
     
 
 def load_all_labels(video_name):
@@ -230,9 +291,10 @@ def load_suggested_labels(video_name, anno_folder="/home/t-yuche/gt-labeling/sug
 
 
 
-def load_video_processed_turker(turker_folder, video_name):
+def load_video_processed_turker(video_name, turker_folder = '/mnt/tags/turker-all'):
     '''
-    Return singularized turker label
+    Return singularized turker label (after wordnet processing)
+    [{"gt_labels": [], "frame_name": "0.jpg"}, {"gt_labels": ["street sign", "sign"], "frame_name": "30.jpg"}]
     '''
     file_path = os.path.join(turker_folder, video_name + '.json')
         
