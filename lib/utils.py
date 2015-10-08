@@ -111,8 +111,11 @@ def cos_similarty(a_dict, b_dict):
         sumab += a * b
         sumaa += a * a
         sumbb += b * b        
-   
-    return sumab/(math.sqrt(sumaa) * math.sqrt(sumbb))
+  
+    if sumab == 0:
+        return 0
+    else: 
+        return sumab/(math.sqrt(sumaa) * math.sqrt(sumbb))
  
 
 
