@@ -1,6 +1,11 @@
 import json
 
 
+def convert_to_equal_word():
+
+    convert_dict = {'domestic cat': 'cat', 'people': 'person', 'man': 'person', 'men': 'person', 'woman': 'person', 'women': 'person', 'girl': 'person', 'boy': 'person'}
+    
+    return convert_dict 
 
 def word_wnid_dict():
     
