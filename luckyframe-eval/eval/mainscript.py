@@ -1,4 +1,7 @@
 from utils import *
+from mapk import *
+from ndcg import *
+import scipy.stats as stats
 import operator
 import pickle
 
@@ -23,7 +26,7 @@ def load():
         msr_cap[video_name] = _msr_cap_data
         rcnn[video_name] = _rcnn_data
 
-        if vid == 50:
+        if vid == 2500:
             break
     return vgg, fei_cap, msr_cap, rcnn
 
@@ -61,10 +64,13 @@ def get_inrange_fids(start_fid, end_fid, subsampled_frames):
 
     for f_count, f_name in enumerate(subsampled_frames):
         fid = int(f_name.split('.')[0])
-
+         
         if f_count == 0:
             prev_fid = fid
-                
+        else:
+            prev_fid = int(subsampled_frames[f_count - 1].split('.')[0])
+        
+        
         if prev_fid < start_fid and fid > end_fid:
             in_range_fids += [prev_fid]
             break
@@ -75,6 +81,8 @@ def get_inrange_fids(start_fid, end_fid, subsampled_frames):
         if fid > end_fid:
             break
 
+    if len(in_range_fids) == 0:
+        in_range_fids += [int(subsampled_frames[-1].split('.')[0])]
     return in_range_fids 
 
 
@@ -98,6 +106,38 @@ def get_subsampled_tf(video_name, vgg_data, msr_data, rcnn_data, fei_data, in_ra
 
     return s_tf
 
+
+def reindexing(gt_video_rank, test_video_rank):
+    """
+    Indexing ranked video list using ground-truth video ranking
+    """ 
+    gt_rank = []
+    k = 0
+    for tid, tup in enumerate(gt_video_rank):
+        video_name = tup[0]
+        score = tup[1]
+        if score > 0.0:
+            k += 1
+        gt_rank += [video_name] 
+     
+    test_rank = [] 
+    for tvid, tup in enumerate(test_video_rank):
+        t_video_name = tup[0]
+        t_score = tup[1]
+        test_rank += [gt_rank.index(t_video_name)]
+
+    return test_rank, k
+
+# TODO: only consider score > 0
+def kendall_correlation(gt_video_rank, test_video_rank):
+  
+    assert(len(gt_video_rank) == len(test_video_rank))
+    tau, p_value = stats.kendalltau(range(len(gt_video_rank)), test_video_rank)
+    
+    return tau, p_value 
+      
+
+ 
 def run(vgg, fei, msr, rcnn):
     
     SERVER_STORAGE_FRAMES = 5 * 30 # 5 sec * 30 fps
@@ -120,7 +160,9 @@ def run(vgg, fei, msr, rcnn):
         greedy_video_tfs = []
 
         for vid, video_name in enumerate(videos):
-            
+        
+            if vid > 100:
+                continue    
             if video_name not in vgg:
                 continue
             
@@ -145,9 +187,11 @@ def run(vgg, fei, msr, rcnn):
             # add random delays to each video stream -- starting at random position
             hash_str = video_name + query
             hash_val = int(abs(hash(hash_str)))%10
-            video_start_fid = (video_len_f/10) * hash_val  
-            video_end_fid = max(video_start_fid + SERVER_STORAGE_FRAMES, video_len_f - 1)
-          
+            video_start_fid = int((video_len_f/10.0) * hash_val)
+            video_end_fid = min(video_start_fid + SERVER_STORAGE_FRAMES, video_len_f - 1)
+
+            #print video_start_fid, video_end_fid
+
             ## Non-subsampled video ## 
             # process in-server info for non-subsampled video
             _vgg_data = filter(lambda x: int(x['img_path'].split('/')[-1].split('.')[0]) >= video_start_fid and int(x['img_path'].split('/')[-1].split('.')[0]) <= video_end_fid, vgg_data)
@@ -169,6 +213,8 @@ def run(vgg, fei, msr, rcnn):
 
             ## Greedy -- subsampled video ##
             greedy_range_fids = get_inrange_fids(video_start_fid, video_end_fid, greedy_frames)
+            #print 'greedy frames', greedy_frames
+            #print 'greedy range fids', greedy_range_fids
             greedy_tf = get_subsampled_tf(video_name, vgg_data, msr_data, rcnn_data, fei_data, greedy_range_fids)
             greedy_video_tfs += [{'video_name': video_name, 'tf': greedy_tf}]
 
@@ -177,10 +223,33 @@ def run(vgg, fei, msr, rcnn):
         n_video_rank = rank(query, n_video_tfs)
         uni_video_rank = rank(query, uni_video_tfs) 
         greedy_video_rank = rank(query, greedy_video_tfs)
- 
-        print n_video_rank                        
-        print uni_video_rank
-        print greedy_video_rank    
 
-#def run(vgg, fei, msr, rcnn):
-#    return 
+        rn_video_rank, k = reindexing(n_video_rank, n_video_rank)
+        runi_video_rank, k  = reindexing(n_video_rank, uni_video_rank)
+        rgreedy_video_rank, k = reindexing(n_video_rank, greedy_video_rank)
+
+        
+        video_rel = get_video_rel(n_video_rank)    
+        gt_dcg = dcg(video_rel, n_video_rank)
+        print 'gt_dcg', gt_dcg
+ 
+        print n_video_rank
+        print rn_video_rank
+        print rn_video_rank
+        print kendall_correlation(rn_video_rank, rn_video_rank)
+        print apk(rn_video_rank, rn_video_rank, k)
+        print 'dcg:', dcg(video_rel, n_video_rank)/gt_dcg
+
+        print uni_video_rank
+        print rn_video_rank
+        print runi_video_rank
+        print kendall_correlation(rn_video_rank, runi_video_rank)
+        print apk(rn_video_rank, runi_video_rank, k)
+        print 'dcg:', dcg(video_rel, uni_video_rank)/gt_dcg
+
+        print greedy_video_rank
+        print rn_video_rank
+        print rgreedy_video_rank
+        print kendall_correlation(rn_video_rank, rgreedy_video_rank)
+        print apk(rn_video_rank, rgreedy_video_rank, k)
+        print 'dcg:', dcg(video_rel, greedy_video_rank)/gt_dcg
