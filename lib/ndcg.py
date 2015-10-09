@@ -5,6 +5,7 @@ def get_video_rel(gt_video_rank, score_thresh, method = 0):
     """
     method 0: [1. 0.6309, 0.5, 0.4307, ...]
     method 1: reciprocal rank score
+    method 2: cos_sim
     """
    
     video_rel = {}
@@ -22,6 +23,12 @@ def get_video_rel(gt_video_rank, score_thresh, method = 0):
                 video_rel[video_name] = 1/((tid + 1) * 1.0) 
             else:
                 video_rel[video_name] = 0.0
+        elif method == 2:
+            if score > score_thresh:
+                video_rel[video_name] = score
+            else:
+                video_rel[video_name] = 0.0
+    
         
     return video_rel
 
