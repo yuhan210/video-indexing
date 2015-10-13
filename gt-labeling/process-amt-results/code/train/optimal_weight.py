@@ -8,8 +8,6 @@ TOOL_PATH = '/home/t-yuche/clustering/tools'
 sys.path.append(TOOL_PATH)
 from utils import *
 
-    
-
 
 if __name__ == "__main__":
 
@@ -20,19 +18,8 @@ if __name__ == "__main__":
     MSR_IDX = 3
     TURKER_IDX = 4
 
-    SELECTED_VIDEOS = "sele_video_list.txt"
-    if os.path.exists(SELECTED_VIDEOS):
-        videos = open(SELECTED_VIDEOS).read().split()
-    else:
-        VIDEO_LIST = "/mnt/video_list.txt"
-        videos = open(VIDEO_LIST).read().split()
-        # randomly sample 250 videos
-        videos = random.sample(videos, 250)    
-        fh = open(SELECTED_VIDEOS, 'w')
-        for video in videos:
-            fh.write(video + '\n')
-
-        fh.close() 
+    VIDEO_LIST = "/mnt/video_list.txt"
+    videos = open(VIDEO_LIST).read().split()
         
     STOPWORDS = get_stopwords(1)
     wptospd = word_pref_to_stopword_pref_dict()
