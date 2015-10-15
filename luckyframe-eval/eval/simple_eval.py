@@ -35,7 +35,7 @@ def get_combined_tfs(tfs_dict):
 def remove_unimportantwords(tf):
     new_tf = {}
     for w in tf:
-        if tf[w] > 0.6:
+        if tf[w] > 0.5:
             new_tf[w] = tf[w]
 
     return new_tf
@@ -73,13 +73,12 @@ def combine_all_modeldicts(_vgg_data, _msr_data, _rcnn_data, _fei_data, frame_pa
         # combine words
         
         rcnn_ws = []
-        '''
         if len(rcnn_data) > 0:
             for rcnn_idx, word in enumerate(rcnn_data['pred']['text']):
                 ## the confidence is higher than 10^(-3) and is not background
-                if rcnn_data['pred']['conf'][rcnn_idx] > 0.001 and word not in stop_words:
+                if rcnn_data['pred']['conf'][rcnn_idx] > 0.0005 and word not in stop_words:
                     rcnn_ws += [word]
-        '''
+
         vgg_ws = []
         if len(vgg_data) > 0:
             for vgg_idx, w in enumerate(vgg_data['pred']['text']):
@@ -385,7 +384,7 @@ def plot_scores(video_name, start_fids, greedy_scores, uniform_scores, greedy_fi
 
     plt.title(video_name)
     plt.legend(loc = 4)
-    plt.savefig(video_name + '.png', dpi = 100)
+    plt.savefig('/home/t-yuche/luckyframe-eval/eval/anec-figs/thresh_08', video_name + '.png', dpi = 100)
     #plt.show()
     return 
 
@@ -616,22 +615,21 @@ if __name__ == "__main__":
 
     SERVER_STORAGE_FRAMES = 5 * 30 # 5 sec * 30 fps
     SLIDE_SIZE_FRAMES = 1 * 30 # 1 sec * 30 fps
-    BASELINE_SAMPLERATE = 0.016
-    
-     
-    greedy_folder = '/home/t-yuche/luckyframe-eval/greedy-log'
+    BASELINE_SAMPLERATE = 0.00532
+    GREEDY_FOLDER = '/home/t-yuche/luckyframe-eval/eval/greedy-results' 
+    THRESH = 0.8     
+
+    greedy_folder = '/home/t-yuche/luckyframe-eval/window-greedy-log'
     VIDEO_LIST = '/mnt/video_list.txt'
     videos = open(VIDEO_LIST).read().split()
 
     sample_rates = []
     for vid, video_name in enumerate(videos):
        
-        if vid != 5:
-            continue 
         rcnn_dict, vgg_dict, fei_caption_dict, msr_cap_dict, dummy = load_all_modules_dict(video_name)
         print video_name      
         # load greedy subsampled frames
-        greedy_gt_path = os.path.join(greedy_folder, video_name +  '_0.5_gtframe.pickle')
+        greedy_gt_path = os.path.join(greedy_folder, video_name +  '_' + str(THRESH) + '_gtframe.pickle')
         with open(greedy_gt_path) as gt_fh:
             selected_frame_obj = pickle.load(gt_fh)
             greedy_frames = [ str(x) + '.jpg' for x in selected_frame_obj['picked_f']]
@@ -639,7 +637,7 @@ if __name__ == "__main__":
             subsampled_rate = selected_frame_obj['picked_rate']
             sample_rates += [subsampled_rate]
 
-            BASELINE_SAMPLERATE = subsampled_rate
+            #BASELINE_SAMPLERATE = subsampled_rate
             print subsampled_rate
         # baseline
         uniform_frames = naive_subsample_frames(os.listdir(os.path.join('/mnt/frames', video_name)), BASELINE_SAMPLERATE) 
@@ -656,7 +654,7 @@ if __name__ == "__main__":
 
             if video_start_fid > video_len_f - 1:
                 break  
-            video_end_fid = min(video_start_fid + SERVER_STORAGE_FRAMES, video_len_f - 1)
+            video_end_fid = min(video_start_fid + SERVER_STORAGE_FRAMES, video_len_f)
             print 'start:', video_start_fid, ' end:', video_end_fid 
             ''' Optimal '''            
             optimal_frames = [os.path.join('/mnt/frames', video_name, str(x) + '.jpg') for x in range(video_start_fid, video_end_fid)] 
@@ -698,4 +696,7 @@ if __name__ == "__main__":
 
      
         plot_scores(video_name, start_fids, greedy_scores, uniform_scores, selected_frame_obj['picked_f'], [int(x.split('.')[0]) for x in uniform_frames], subsampled_rate, BASELINE_SAMPLERATE)
-        break
+        with open(os.path.join(GREEDY_FOLDER, video_name + '_greedy_' + str(THRESH) + '_' + str(BASELINE_SAMPLERATE) + '.pickle', 'wb')) as fh:
+            pickle.dump(greedy_scores, fh)
+        with open(os.path.join(GREEDY_FOLDER, video_name + '_uniform_' + str(THRESH) + '_' + str(BASELINE_SAMPLERATE) + '.pickle', 'wb')) as fh:
+            pickle.dump(uniform_scores, fh)
