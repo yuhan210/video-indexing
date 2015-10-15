@@ -384,7 +384,7 @@ def plot_scores(video_name, start_fids, greedy_scores, uniform_scores, greedy_fi
 
     plt.title(video_name)
     plt.legend(loc = 4)
-    plt.savefig('/home/t-yuche/luckyframe-eval/eval/anec-figs/thresh_08', video_name + '.png', dpi = 100)
+    plt.savefig('/home/t-yuche/luckyframe-eval/eval/anec-figs/thresh_08/' + video_name + '.png', dpi = 100)
     #plt.show()
     return 
 
