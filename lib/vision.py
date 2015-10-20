@@ -1,7 +1,81 @@
+import os
 import cv2
+import json
+import math
 import numpy as np
+import pickle
 from PIL import Image
 import imagehash
+
+def parseMVs(video_name, folder = '/mnt/tags/video-encoding-info'):
+
+    mvdata = {}
+    with open(os.path.join(folder, video_name + '_mvs.txt')) as fh:
+        for idx, line in enumerate(fh.readlines()):
+            if idx == 0:
+                continue
+            segs = line.split(',')
+            segs = [x.strip() for x in segs]
+            framename = segs[0] + '.jpg'
+            source = int(segs[1])
+            blockw = int(segs[2])
+            blockh = int(segs[3])
+            srcx = int(segs[4])
+            srcy = int(segs[5])
+            dstx = int(segs[6])
+            dsty = int(segs[7])
+
+            dist = math.sqrt((srcx - dstx)**2 + (srcy - dsty)**2)
+            if framename not in mvdata:
+                mvdata[framename] = []
+            mvdata[framename] += [dist]
+
+    return mvdata
+
+def parseVideoProbeLog(video_name, folder = '/mnt/tags/video-encoding-info'):
+
+    data = {}
+    with open(os.path.join(folder, video_name + '_encoding.json')) as fh:
+        raw_data = json.load(fh)
+        for x in raw_data['packets_and_frames']:
+            if x['type'] == 'frame':
+                framenum = x['coded_picture_number']
+                
+                frame_name = str(framenum) + '.jpg'
+                print frame_name
+                w = int(x['width'])
+                h = int(x['height'])
+                frame_type = x['pict_type'] # I, P, B
+                size = int(x['pkt_size'])
+                
+                if 'metadata' not in data:
+                    data['metadata'] = {'w': w, 'h':h} 
+                data[frame_name] = {'type': frame_type, 'size':size}
+
+    return data
+
+if __name__ == "__main__":
+
+
+    VIDEO_LIST = '/mnt/video_list.txt'
+    PROCESSED_FOLDER = '/mnt/tags/cv-processed-info'
+    for video_name in open(VIDEO_LIST).read().split():
+        
+        mv_data = parseMVs(video_name)
+        encoding_data = parseVideoProbeLog(video_name)
+
+        with open(os.path.join(PROCESSED_FOLDER, video_name '_mv.pickle'), 'wb') as fh:
+            pickle.dump(mv_data, fh)
+
+        with open(os.path.join(PROCESSED_FOLDER, video_name '_enc.pickle'), 'wb') as fh:
+            pickle.dump(encoding_data, fh)
+
+def getCVInfoFromLog(video_name, folder = '/mnt/tags/cv-info'):
+    
+    with open(os.path.join(folder, video_name)) as fh:
+        cvdata = pickle.load(fh)
+
+    return cvdata
 
 def getSobel(img, k_size = 3):
 
