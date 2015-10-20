@@ -1,5 +1,6 @@
 from vision import *
 import pickle
+import time
 import os
 import cv2
 
@@ -19,9 +20,15 @@ if __name__ == "__main__":
             if  h * w > 320 * 240:
                 img = cv2.resize(img, (320, 240)) 
             
+            tic = time.time()
             sobel = getSobel(img)
+            toc = time.time()
+            sobeltime = toc - tic
+            tic = time.time()
             illu = getIlluminance(img)
-            data[frame_name] = [sobel, illu]
+            toc = time.time()
+            illutime = toc - tic
+            data[frame_name] = {'sobel': [sobel, sobeltime], 'illu': [illu, illutime]}
     
         with open(os.path.join(CVFOLDER, video + '.pickle'), 'wb') as fh:
             pickle.dump(data, fh) 
