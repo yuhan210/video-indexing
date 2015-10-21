@@ -1,4 +1,3 @@
-import os
 import cv2
 import json
 import math
@@ -6,6 +5,59 @@ import numpy as np
 import pickle
 from PIL import Image
 import imagehash
+
+
+def colorHistSim(a, b):
+    a = cv2.cvtColor(a, cv2.COLOR_BGR2HSV)
+    b = cv2.cvtColor(b, cv2.COLOR_BGR2HSV)
+
+    ahist = cv2.calcHist([a], [0, 1], None, [180, 256], [0, 180, 0, 256])
+    bhist = cv2.calcHist([b], [0, 1], None, [180, 256], [0, 180, 0, 256])
+    
+    cv2.normalize(ahist,ahist,0,255,cv2.NORM_MINMAX)
+    cv2.normalize(bhist,bhist,0,255,cv2.NORM_MINMAX)
+
+    sim = cv2.compareHist(ahist, bhist, cv2.cv.CV_COMP_CORREL)
+
+    return sim
+
+def filter_matches(matches):
+    good = []
+    for m, n in matches:
+        if m.distance < 0.75 * n.distance:
+            good.append([m])
+    return good
+
+
+def getSIFTMatchingSim(a, b):
+    a = cv2.cvtColor(a, cv2.COLOR_BGR2GRAY)    
+    b = cv2.cvtColor(b, cv2.COLOR_BGR2GRAY)    
+
+    sift = cv2.SIFT()
+    kp1, des1 = sift.detectAndCompute(a, None)
+    kp2, des2 = sift.detectAndCompute(b, None)
+     
+    bf = cv2.BFMatcher()
+    matches = bf.knnMatch(des1, des2, k = 2)
+    good_matches = filter_matches(matches)
+
+    return len(kp1)/(len(good_matches) * 1.0)
+
+
+def getSURFMatchingSim(a, b):
+    a = cv2.cvtColor(a, cv2.COLOR_BGR2GRAY)    
+    b = cv2.cvtColor(b, cv2.COLOR_BGR2GRAY)    
+
+    surf = cv2.SURF()
+    kp1, des1 = surf.detectAndCompute(a, None)
+    kp2, des2 = surf.detectAndCompute(b, None)
+     
+    bf = cv2.BFMatcher()
+    matches = bf.knnMatch(des1, des2, k = 2)
+    good_matches = filter_matches(matches)
+
+    return len(kp1)/(len(good_matches) * 1.0)
+
 
 def parseMVs(video_name, folder = '/mnt/tags/video-encoding-info'):
 
@@ -32,6 +84,18 @@ def parseMVs(video_name, folder = '/mnt/tags/video-encoding-info'):
 
     return mvdata
 
+def frameType1ofKCoding(frame_type_str):
+    
+    if frame_type_str == 'I':
+        return (0,0)
+    elif frame_type_str == 'P':
+        return (0,1)
+    elif frame_type_str == 'B':
+        return (1,0)
+    else:
+        print 'Unknown frame type:', frame_type_str
+        return None  
+
 def parseVideoProbeLog(video_name, folder = '/mnt/tags/video-encoding-info'):
 
     data = {}
@@ -42,7 +106,6 @@ def parseVideoProbeLog(video_name, folder = '/mnt/tags/video-encoding-info'):
                 framenum = x['coded_picture_number']
                 
                 frame_name = str(framenum) + '.jpg'
-                print frame_name
                 w = int(x['width'])
                 h = int(x['height'])
                 frame_type = x['pict_type'] # I, P, B
@@ -56,26 +119,40 @@ def parseVideoProbeLog(video_name, folder = '/mnt/tags/video-encoding-info'):
 
 if __name__ == "__main__":
 
-
     VIDEO_LIST = '/mnt/video_list.txt'
     PROCESSED_FOLDER = '/mnt/tags/cv-processed-info'
     for video_name in open(VIDEO_LIST).read().split():
-        
+        print video_name 
+        mvpath = os.path.join(PROCESSED_FOLDER, video_name + '_mv.pickle')
+        encpath = os.path.join(PROCESSED_FOLDER, video_name +'_enc.pickle')
+        if os.path.exists(mvpath) and os.path.exists(encpath):
+            continue
+
         mv_data = parseMVs(video_name)
         encoding_data = parseVideoProbeLog(video_name)
 
-        with open(os.path.join(PROCESSED_FOLDER, video_name '_mv.pickle'), 'wb') as fh:
+        with open(os.path.join(PROCESSED_FOLDER, video_name + '_mv.pickle'), 'wb') as fh:
             pickle.dump(mv_data, fh)
 
-        with open(os.path.join(PROCESSED_FOLDER, video_name '_enc.pickle'), 'wb') as fh:
+        with open(os.path.join(PROCESSED_FOLDER, video_name +'_enc.pickle'), 'wb') as fh:
             pickle.dump(encoding_data, fh)
 
 def getCVInfoFromLog(video_name, folder = '/mnt/tags/cv-info'):
+    #data[frame_name] = {'sobel': [sobel, sobeltime], 'illu': [illu, illutime]}
     
-    with open(os.path.join(folder, video_name)) as fh:
+    with open(os.path.join(folder, video_name + '.pickle')) as fh:
         cvdata = pickle.load(fh)
 
     return cvdata
+
+def getCompressedInfoFromLog(video_name, folder = '/mnt/tags/cv-processed-info'):
+    with open(os.path.join(folder, video_name + '_mv.pickle')) as fh:
+        mvdata = pickle.load(fh)
+    
+    with open(os.path.join(folder, video_name + '_enc.pickle')) as fh:
+        encdata = pickle.load(fh)
+
+    return mvdata, encdata
 
 def getSobel(img, k_size = 3):
 
@@ -110,6 +187,22 @@ def getIlluminance(img):
     
     return ave_lum
 
+def getFrameDiff(prev_frame, cur_frame):
+
+    prev_frame = cv2.cvtColor(prev_frame, cv2.COLOR_BGR2GRAY)
+    cur_frame = cv2.cvtColor(cur_frame, cv2.COLOR_BGR2GRAY)
+    
+    frameDelta = cv2.absdiff(prev_frame, cur_frame)
+    thresh = cv2.threshold(frameDelta, 35, 255, cv2.THRESH_BINARY)[1]
+
+    thresh = cv2.dilate(thresh, None, iterations=2)
+    movement = cv2.countNonZero(thresh)
+
+
+    return movement
+
+    
+
 def phash(a, b):
     a_hash = imagehash.phash(a)
     b_hash = imagehash.phash(b)
@@ -121,6 +214,7 @@ def dhash(a, b):
     b_hash = imagehash.dhash(b)
 
     return a_hash - b_hash
+
 
 def ahash(a, b):
     a_hash = imagehash.average_hash(a)
