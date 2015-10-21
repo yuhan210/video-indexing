@@ -41,7 +41,9 @@ def getSIFTMatchingSim(a, b):
     matches = bf.knnMatch(des1, des2, k = 2)
     good_matches = filter_matches(matches)
 
-    return len(kp1)/(len(good_matches) * 1.0)
+    if len(kp1) == 0:
+        return -1
+    return len(good_matches)/(len(kp1) * 1.0)
 
 
 def getSURFMatchingSim(a, b):
@@ -55,8 +57,10 @@ def getSURFMatchingSim(a, b):
     bf = cv2.BFMatcher()
     matches = bf.knnMatch(des1, des2, k = 2)
     good_matches = filter_matches(matches)
-
-    return len(kp1)/(len(good_matches) * 1.0)
+    
+    if len(kp1) == 0:
+        return -1
+    return len(good_matches)/(len(kp1) * 1.0)
 
 
 def parseMVs(video_name, folder = '/mnt/tags/video-encoding-info'):
