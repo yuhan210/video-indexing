@@ -12,6 +12,10 @@ import os
 
 BAD_WORDS = ['none', 'blurry', 'dark']
 
+def deprecation(message):
+    from warnings import warn
+    warn(message, DeprecationWarning, stacklevel=2)
+
 def naive_subsample_frames(all_frames, FRAME_RETAIN_RATE):
 
     all_frames = sorted(all_frames, key=lambda x: int(x.split('.')[0]))
@@ -52,9 +56,10 @@ def isbadframe(_turker_data, tfs_obj):
      
     # idenitify bad frame based on some heuristics
     # TODO: think deeper about it
-    for w in tf: 
-        if w in BAD_WORDS:
-            return True
+    
+    #for w in tf: 
+    #    if w in BAD_WORDS:
+    #        return True
 
     return False
 
@@ -76,8 +81,13 @@ def turker_isbadframe(gt_labels):
     return False
 
 def load_video_rcnn_bbx(rcnn_bbx_folder, video_name):
+    
 
     file_pref = os.path.join(rcnn_bbx_folder, video_name)    
+    filepath = file_pref + '_rcnnbbx.json'
+
+    if not os.path.exists(filepath):
+        return [], {}
 
     # load rcnn bbx
     with open(file_pref + '_rcnnbbx.json') as json_file:
@@ -85,7 +95,12 @@ def load_video_rcnn_bbx(rcnn_bbx_folder, video_name):
 
     rcnn_bbx_data = sorted(rcnn_bbx_data['imgblobs'], key=lambda x: int(x['img_path'].split('/')[-1].split('.')[0]))
 
-    return rcnn_bbx_data
+    rcnn_bbx_dict = {}
+    for item in rcnn_bbx_data:
+        image_path = item['img_path']
+        rcnn_bbx_dict[image_path] = {'pred': item['pred'], 'rcnn_time': item['rcnn_time']}
+
+    return rcnn_bbx_data, rcnn_bbx_dict
 
 
 def cos_similarty(a_dict, b_dict):
@@ -131,7 +146,7 @@ def get_combined_tfs(tfs_dict):
 
     return combined_tfs
 
-def combine_all_models(video_name, _vgg_data, _msr_data, _rcnn_data, _fei_data):
+def combine_all_models_tmp(video_name, _vgg_data, _msr_data, _rcnn_data, _fei_data):
 
     stop_words = get_stopwords()
     wptospd = word_pref_to_stopword_pref_dict()
@@ -218,6 +233,93 @@ def combine_all_models(video_name, _vgg_data, _msr_data, _rcnn_data, _fei_data):
 
     return tf_list
 
+def combine_all_models(video_name, _vgg_data, _msr_data, _rcnn_data, _fei_data):
+
+    stop_words = get_stopwords()
+    wptospd = word_pref_to_stopword_pref_dict()
+    convert_dict = convert_to_equal_word()
+
+    tf_list = []
+    assert(len(_vgg_data) == len(_msr_data))
+    assert(len(_rcnn_data) == len(_fei_data))
+    assert(len(_vgg_data) == len(_fei_data))
+
+    for fid in xrange(len(_vgg_data)):
+
+        rcnn_data = _rcnn_data[fid]
+        vgg_data = _vgg_data[fid]
+        msr_data = _msr_data[fid]
+        fei_data = _fei_data[fid]
+   
+        frame_name = rcnn_data['image_path'].split('/')[-1]
+        assert(rcnn_data['image_path'] == vgg_data['img_path'])
+        assert(rcnn_data['image_path'] == msr_data['img_path'])
+        assert(rcnn_data['image_path'] == fei_data['img_path'])
+
+        # combine words
+        rcnn_ws = []
+        if len(rcnn_data) > 0:
+            for rcnn_idx, word in enumerate(rcnn_data['pred']['text']):
+                ## the confidence is higher than 10^(-3) and is not background
+                if rcnn_data['pred']['conf'][rcnn_idx] > 0.0005 and word not in stop_words:
+                    rcnn_ws += [word]
+        vgg_ws = []
+        if len(vgg_data) > 0:        
+            vgg_ws = [w for w in vgg_data['pred']['text']]
+   
+        fei_ws = [] 
+        '''
+        if len(fei_data) > 0:
+            str_list = fei_data['candidate']['text']
+            for s in str_list:
+                for w in s.split(' '):
+                    w = inflection.singularize(w)
+                    if w not in stop_words and w not in fei_ws:
+                        fei_ws += [w]         
+        '''
+        msr_ws = [] 
+        if len(msr_data) > 0:
+            for msr_idx, w in enumerate(msr_data['words']['text']):
+                w = inflection.singularize(w)
+                prob = msr_data['words']['prob'][msr_idx]
+                if w not in stop_words and w not in msr_ws and prob > -5:
+                    msr_ws += [w]
+
+        words = {}
+        for w in rcnn_ws:
+            if w not in words:
+                words[w] = 1
+            else:
+                words[w] += 1
+        for w in vgg_ws:
+            
+            w = wptospd[w]
+            if w in convert_dict:
+                w = convert_dict[w]
+            if w not in words:
+                words[w] = 1
+            else:
+                words[w] += 1
+        
+        for w in fei_ws:
+            if w not in words:
+                words[w] = 1
+            else:
+                words[w] += 1
+    
+        for w_idx, w in enumerate(msr_ws):
+            if w not in words:
+                words[w] = 1
+            else:
+                words[w] += 1
+
+        if '' in words:
+            words.pop('', None)
+
+        tf_list += [{'frame_name': frame_name, 'tf': words}]
+
+    return tf_list
+
 
 def getwnid(w):
 
@@ -250,16 +352,31 @@ def load_all_modules(video_name):
     if not os.path.exists(os.path.join('/mnt/tags/rcnn-info-all', video_name + '_rcnnrecog.json')) or not os.path.exists(os.path.join('/mnt/tags/vgg-classify-all', video_name + '_recog.json')) or not os.path.exists(os.path.join('/mnt/tags/msr-caption-all', video_name + '_msrcap.json')) or not os.path.exists(os.path.join('/mnt/tags/fei-caption-all', video_name + '_5_caption.json')): #or not os.path.exists(os.path.join('/mnt/tags/rcnn-bbx-tmp', video_name + '_rcnnbbx.json')):
         return None, None, None, None, None
 
-    rcnn_data = load_video_rcnn('/mnt/tags/rcnn-info-all', video_name)
-    vgg_data = load_video_recog('/mnt/tags/vgg-classify-all', video_name)
-    fei_caption_data = load_video_caption('/mnt/tags/fei-caption-all', video_name)
-    msr_cap_data = load_video_msr_caption('/mnt/tags/msr-caption-all', video_name)
+    rcnn_data, rcnn_dict = load_video_rcnn('/mnt/tags/rcnn-info-all', video_name)
+    vgg_data, vgg_dict = load_video_recog('/mnt/tags/vgg-classify-all', video_name)
+    fei_caption_data, fei_caption_dict = load_video_caption('/mnt/tags/fei-caption-all', video_name)
+    msr_cap_data, msr_cap_dict = load_video_msr_caption('/mnt/tags/msr-caption-all', video_name)
     #rcnn_bbx = load_video_rcnn_bbx('/mnt/tags/rcnn-bbx-tmp', video_name) 
 
     return rcnn_data, vgg_data, fei_caption_data, msr_cap_data, None
-    
+
+
+#TODO: also load rcnn bbx
+def load_all_modules_dict(video_name):
+   
+    if not os.path.exists(os.path.join('/mnt/tags/rcnn-info-all', video_name + '_rcnnrecog.json')) or not os.path.exists(os.path.join('/mnt/tags/vgg-classify-all', video_name + '_recog.json')) or not os.path.exists(os.path.join('/mnt/tags/msr-caption-all', video_name + '_msrcap.json')) or not os.path.exists(os.path.join('/mnt/tags/fei-caption-all', video_name + '_5_caption.json')): #or not os.path.exists(os.path.join('/mnt/tags/rcnn-bbx-tmp', video_name + '_rcnnbbx.json')):
+        return None, None, None, None, None
+
+    rcnn_data, rcnn_dict = load_video_rcnn('/mnt/tags/rcnn-info-all', video_name)
+    vgg_data, vgg_dict = load_video_recog('/mnt/tags/vgg-classify-all', video_name)
+    fei_caption_data, fei_caption_dict = load_video_caption('/mnt/tags/fei-caption-all', video_name)
+    msr_cap_data, msr_cap_dict = load_video_msr_caption('/mnt/tags/msr-caption-all', video_name)
+    #rcnn_bbx = load_video_rcnn_bbx('/mnt/tags/rcnn-bbx-tmp', video_name) 
+
+    return rcnn_dict, vgg_dict, fei_caption_dict, msr_cap_dict, None
 
 def load_all_labels(video_name):
+    deprecation("Using local_all_moduels(video_name) instead")
 
     rcnn_data = load_video_rcnn('/mnt/tags/rcnn-info-all', video_name)
     vgg_data = load_video_recog('/mnt/tags/vgg-classify-keyframe', video_name)
@@ -297,7 +414,8 @@ def load_suggested_labels(video_name, anno_folder="/home/t-yuche/gt-labeling/sug
 def load_video_processed_turker(video_name, turker_folder = '/mnt/tags/turker-all'):
     '''
     Return singularized turker label (after wordnet processing)
-    [{"gt_labels": [], "frame_name": "0.jpg"}, {"gt_labels": ["street sign", "sign"], "frame_name": "30.jpg"}]
+    labelobj_list = [{"gt_labels": [], "frame_name": "0.jpg"}, {"gt_labels": ["street sign", "sign"], "frame_name": "30.jpg"}]
+    labeldict = ["0.jpg": [], "30.jpg": ["street sign", "sign"]]
     '''
     file_path = os.path.join(turker_folder, video_name + '.json')
         
@@ -305,7 +423,13 @@ def load_video_processed_turker(video_name, turker_folder = '/mnt/tags/turker-al
         return None    
 
     with open(file_path) as fh:
-        return json.load(fh) 
+        labelobj_list = json.load(fh) 
+
+    label_dict = {}
+    for labelobj in labelobj_list:
+        label_dict[labelobj['frame_name']] = labelobj['gt_labels']
+
+    return labelobj_list, label_dict
 
 def load_video_turker(turker_folder, video_name):
     '''
@@ -398,7 +522,12 @@ def load_video_msr_caption(msrcaption_folder, video_name):
 
     msrcap_data = sorted(msrcap_data['imgblobs'], key=lambda x: int(x['img_path'].split('/')[-1].split('.')[0]))
 
-    return msrcap_data
+    msrcap_dict = {}
+    for item in msrcap_data:
+        image_path = item['img_path']
+        msrcap_dict[image_path] = {'caption_time': item['caption_time'], 'words': item['words']}
+
+    return msrcap_data, msrcap_dict
 
 def load_video_peopledet(peopled_folder, video_name):
 
@@ -446,7 +575,13 @@ def load_video_rcnn(rcnn_folder, video_name):
 
     rcnn_data = sorted(rcnn_data['imgblobs'], key=lambda x: int(x['image_path'].split('/')[-1].split('.')[0]))
     
-    return rcnn_data
+    rcnn_dict = {}
+    for item in rcnn_data:
+        image_path = item['image_path']
+        rcnn_dict[image_path] = {'rcnn_time': item['rcnn_time'], 'pred': item['pred']}
+
+        
+    return rcnn_data, rcnn_dict
 
     
 
@@ -470,8 +605,13 @@ def load_video_recog(recog_folder, video_name):
         recog_data = json.load(json_file)
 
     recog_data = sorted(recog_data['imgblobs'], key=lambda x: int(x['img_path'].split('/')[-1].split('.')[0]))
-    
-    return recog_data
+  
+    recog_dict = {} 
+    for item in recog_data:
+        image_path = item['img_path']
+        recog_dict[image_path] = {'pred': item['pred']}
+     
+    return recog_data, recog_dict
 
 
 
@@ -487,7 +627,12 @@ def load_video_caption(caption_folder, video_name):
     # sort caption results based on frame number
     caption_data = sorted(caption_data['imgblobs'], key=lambda x:int(x['img_path'].split('/')[-1].split('.')[0]))
 
-    return caption_data
+    caption_dict = {}
+    for item in caption_data:
+        image_path = item['img_path']
+        caption_dict[image_path] = {'rnn_time': item['rnn_time'], 'candidate': item['candidate']}
+
+    return caption_data, caption_dict
 
 
 def load_video_blur(blur_folder, video_name):
