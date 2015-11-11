@@ -12,6 +12,9 @@ if __name__ == "__main__":
 
     for video in videos:
         print video
+        outfilepath = os.path.join(CVFOLDER, video + '.pickle')
+        if os.path.exists(outfilepath):
+            continue
         data = {}
         frames = sorted(os.listdir(os.path.join('/mnt/frames', video)), key = lambda x: int(x.split('.')[0]))
         for frame_name in frames:
@@ -24,10 +27,12 @@ if __name__ == "__main__":
             sobel = getSobel(img)
             toc = time.time()
             sobeltime = toc - tic
+
             tic = time.time()
             illu = getIlluminance(img)
             toc = time.time()
             illutime = toc - tic
+
             data[frame_name] = {'sobel': [sobel, sobeltime], 'illu': [illu, illutime]}
     
         with open(os.path.join(CVFOLDER, video + '.pickle'), 'wb') as fh:
