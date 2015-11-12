@@ -10,7 +10,7 @@ except:
     pass
 
 
-def get_greedy_ave_samplerate(file_name):
+def get_greedy_ave_samplerate(file_name = '/home/t-yuche/admission-control/tools/greedy_sample_rates'):
 
     lines = open(file_name).readlines()
     sample_rates = {}
@@ -56,7 +56,7 @@ if __name__ == "__main__":
     RESULT_FOLDER = '/home/t-yuche/admission-control/eval/greedy-results' 
     VIDEO_LIST = '/mnt/video_list.txt'
     videos = open(VIDEO_LIST).read().split()
-    sample_rates_dict = get_greedy_ave_samplerate('/home/t-yuche/admission-control/tools/greedy_sample_rates')
+    sample_rates_dict = get_greedy_ave_samplerate()
     #THRESHS = [0.4, 0.5, 0.6, 0.7, 0.8, 0.9]    
     THRESHS = [0.8]    
 
@@ -95,9 +95,9 @@ if __name__ == "__main__":
 
 
     plt.figure()
-    plt.errorbar(uniform_rates, uniform_acc, yerr=uniform_accerr, color = 'b', fmt = '--o', label = 'Uniform')
+    plt.errorbar(uniform_rates, uniform_acc, yerr=uniform_accerr, color = 'b', fmt = '-o', label = 'Uniform')
     plt.xscale('log')
-    plt.errorbar(greedy_rates, greedy_acc, yerr=greedy_accerr, color = 'r', fmt = '--x', label = 'Greedy')
+    plt.errorbar(greedy_rates, greedy_acc, yerr=greedy_accerr, color = 'r', fmt = '-x', label = 'Greedy')
     plt.xscale('log')
     plt.ylim([0, 1])
     plt.xlabel('Subsample rate')
