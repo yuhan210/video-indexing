@@ -514,15 +514,19 @@ if __name__ == "__main__":
             #print optimal_tf
     
             ''' Uniform '''
+            tic = time.time()            
             uni_range_fids = get_inrange_fids(video_start_fid, video_end_fid, uniform_frames)
             #print uni_range_fids
             uniform_inrange_frames = [os.path.join('/mnt/frames', video_name, str(x) + '.jpg') for x in uni_range_fids] 
             uniform_tf_list = combine_all_modeldicts(vgg_dict, msr_cap_dict, rcnn_dict, fei_caption_dict, uniform_inrange_frames)
             uniform_tf = get_combined_tfs(uniform_tf_list)
             uniform_score = detailed_measure(optimal_tf, uniform_tf) 
+            toc = time.time()
+            print "Compute uniform for a window:", toc-tic
            
 
             ''' Greedy '''
+            tic = time.time()            
             greedy_range_fids = get_inrange_fids(video_start_fid, video_end_fid, greedy_frames)
             #print greedy_range_fids
             greedy_inrange_frames = [os.path.join('/mnt/frames', video_name, str(x) + '.jpg') for x in greedy_range_fids] 
@@ -530,12 +534,14 @@ if __name__ == "__main__":
             #print greedy_tf_list
             greedy_tf = get_combined_tfs(greedy_tf_list)
             #greedy_tf = remove_unimportantwords(greedy_tf)
+            greedy_score = detailed_measure(optimal_tf, greedy_tf) 
+            toc = time.time()
+            print "Compute greedy for a window:", toc-tic
             '''
             for w in optimal_tf:
                 if w not in greedy_tf:
                     print w, optimal_tf[w]
             '''
-            greedy_score = detailed_measure(optimal_tf, greedy_tf) 
             #print greedy_tf 
             #print uniform_score, greedy_score
 
@@ -545,9 +551,11 @@ if __name__ == "__main__":
 
             video_start_fid +=  SLIDE_SIZE_FRAMES 
 
-     
+        break     
         #plot_scores(video_name, start_fids, greedy_scores, uniform_scores, selected_frame_obj['picked_f'], [int(x.split('.')[0]) for x in uniform_frames], subsampled_rate, BASELINE_SAMPLERATE)
+        '''
         with open(os.path.join(GREEDY_FOLDER, video_name + '_greedy_' + str(THRESH) + '_' + str(BASELINE_SAMPLERATE) + '.pickle'), 'wb') as fh:
             pickle.dump(greedy_scores, fh)
         with open(os.path.join(GREEDY_FOLDER, video_name + '_uniform_' + str(THRESH) + '_' + str(BASELINE_SAMPLERATE) + '.pickle'), 'wb') as fh:
             pickle.dump(uniform_scores, fh)
+        '''
