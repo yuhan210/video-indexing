@@ -61,7 +61,6 @@ def check_video_chunk(chunk, w, h):
 
     longest_path = math.sqrt(w ** 2 + h ** 2)
     chunk_info['moving_lvl'] = math.sqrt((last_obj['bbox'][0] - first_obj['bbox'][0])**2 + (last_obj['bbox'][1] - first_obj['bbox'][1]) ** 2)/(longest_path * 1.0)
-         
 
     return True, chunk_info
 
