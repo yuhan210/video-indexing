@@ -1,9 +1,14 @@
 import model_pb2
 import google.protobuf.text_format
 import ConfigParser
+import logging
 import pickle
 import random
 import os
+
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 config = ConfigParser.ConfigParser()
 config.read('sim.conf')
@@ -90,7 +95,7 @@ class Machine:
                 self.mem_remaining += job.config['mem_req'] 
                 self.cpu_util -= job.get_job_util()
                 finished_pids += [idx]
-                print 'Machine', self.machine_id, 'Finished processing', job
+                logger.info('Mach(%d) finished processing Job(%s)', self.machine_id, job)
         for idx in reversed(finished_pids):
             del self.jobs[idx] # remove process
 
@@ -139,11 +144,11 @@ class Cloud:
        
          
         if machine_status['mem_remain_byte'] - job.config['mem_req'] < 0:
-            #print 'Exceed mem util: remain mem:', machine_status['mem_remain_byte'] , ' mem_req:', job.config['mem_req']
+            logger.debug('Exceed mem util -- remain mem: %f, job mem req: %f', machine_status['mem_remain_byte'] , job.config['mem_req'])
             return False
 
         if machine_status['cpu_util_flop'] + job.config['job_util']  > machine_status['cpu_lim']:
-            #print 'Exceed cpu utilization: cur util:', machine_status['cpu_util_flop'], ' job util:', job.config['job_util']
+            logger.debug('Exceed cpu util -- Cur CPU util: %f, job util: %f', machine_status['cpu_util_flop'],  job.config['job_util'])
             return False
 
         return True
@@ -163,11 +168,11 @@ class Cloud:
                     if self.does_machine_fit(machine_statuses[mid], job):
                         success = self.machines[mid].run(self.scheme, job)
                         if not success:
-                            print 'Error placing', job.process_id, 'on machine', mid
+                            logger.error('Error placing Job(%s) on Mach(%d)', job,  mid)
                             exit(-1)
                         else:
                             # schedule the next job
-                            print 'Schedule', job, 'on', mid
+                            logger.info('Schedule Job(%s) on Mach(%d)', job, mid)
                             start_jobs += [jid]    
                             break
             for jid in reversed(start_jobs):
@@ -212,7 +217,6 @@ def run_scheme(scheme):
             break
         streams += videos
 
-    print len(streams), N_STREAMS
     streams = random.sample(streams, N_STREAMS)
     #####
 
@@ -227,8 +231,10 @@ def run_scheme(scheme):
     #stream_process_log = dict.fromkeys(range(len(streams))) # a dict (key: sid) of dict (key: start_ts, value: end_ts)
     print 'Simulation starts'
 
+    '''
     for stream_name in streams:
         print stream_name, stream_trace[stream_name]
+    '''
     while (cur_ts < SIM_LEN):
         cur_fid = cur_ts / 33
         
@@ -240,7 +246,7 @@ def run_scheme(scheme):
                 job_config = GLOBAL.get_job_config()
                 job = Job(pid, sid, cur_fid, cur_ts, -1, job_config)
                 if cur_ts in stream_process_log[sid].keys():
-                    print 'Error:This job has been dispatched before'
+                    logger.error('This job has been dispatched before')
                     eixt(-1)
                 stream_process_log[sid][cur_ts] = -1
 
@@ -251,12 +257,12 @@ def run_scheme(scheme):
         # cloud processes job queue, update machine occupancy
         finished_jobs = cloud.update(cur_ts)
         for fj in finished_jobs:
-            print fj
+            #print fj
             stream_process_log[fj.stream_id][fj.start_ts] = fj.end_ts
 
         job_queue = cloud.schedule(job_queue)
   
-        cur_ts += 1        
+        cur_ts += 1 
     print stream_process_log
         
 if __name__ == "__main__":
