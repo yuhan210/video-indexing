@@ -1,0 +1,112 @@
+models {
+  name: "A0"
+  type: OBJECT
+  compute: "2540000000"
+  memory: "304056743"
+  loading_latency: 3237.0
+  accuracy: 49.6
+  compute_latency: 133.9
+  cpu_compute_latency: 645.0
+  compute_energy: 3.58
+  s_compute_latency: 9.23
+  s_loading_latency: 919.0
+  loading_energy: 12.69
+}
+models {
+  name: "A1"
+  type: OBJECT
+  compute: "2460000000"
+  memory: "142748067"
+  loading_latency: 1401.0
+  accuracy: 50.0
+  compute_latency: 94.4
+  cpu_compute_latency: 278.0
+  compute_energy: 3.01
+  s_compute_latency: 7.28
+  s_loading_latency: 437.0
+  loading_energy: 7.64
+}
+models {
+  name: "A2"
+  type: OBJECT
+  compute: "2400000000"
+  memory: "74676643"
+  loading_latency: 744.0
+  accuracy: 45.4
+  compute_latency: 76.4
+  cpu_compute_latency: 249.4
+  compute_energy: 2.8
+  s_compute_latency: 6.96
+  s_loading_latency: 228.0
+  loading_energy: 6.15
+}
+models {
+  name: "A3"
+  type: OBJECT
+  compute: "2400000000"
+  memory: "21995421"
+  loading_latency: 243.0
+  accuracy: 43.7
+  compute_latency: 59.6
+  cpu_compute_latency: 226.3
+  compute_energy: 2.65
+  s_compute_latency: 5.8
+  s_loading_latency: 74.0
+  loading_energy: 5.14
+}
+models {
+  name: "A4"
+  type: OBJECT
+  compute: "1800000000"
+  memory: "139749277"
+  loading_latency: 1367.0
+  accuracy: 43.4
+  compute_latency: 78.3
+  cpu_compute_latency: 227.5
+  compute_energy: 2.41
+  s_compute_latency: 6.47
+  s_loading_latency: 424.0
+  loading_energy: 7.54
+}
+models {
+  name: "A5"
+  type: OBJECT
+  compute: "1450000000"
+  memory: "139064989"
+  loading_latency: 1359.0
+  accuracy: 42.2
+  compute_latency: 70.9
+  cpu_compute_latency: 185.1
+  compute_energy: 1.96
+  s_compute_latency: 6.08
+  s_loading_latency: 423.0
+  loading_energy: 7.68
+}
+models {
+  name: "A6"
+  type: OBJECT
+  compute: "838000000"
+  memory: "165644711"
+  loading_latency: 1590.0
+  accuracy: 46.0
+  compute_latency: 50.9
+  cpu_compute_latency: 180.1
+  compute_energy: 1.6
+  s_compute_latency: 6.31
+  s_loading_latency: 492.0
+  loading_energy: 8.32
+}
+models {
+  name: "A7"
+  type: OBJECT
+  compute: "792000000"
+  memory: "73542051"
+  loading_latency: 723.0
+  accuracy: 42.7
+  compute_latency: 34.8
+  cpu_compute_latency: 128.6
+  compute_energy: 1.24
+  s_compute_latency: 5.36
+  s_loading_latency: 236.0
+  loading_energy: 5.95
+}
