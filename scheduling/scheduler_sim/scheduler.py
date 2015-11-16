@@ -7,7 +7,7 @@ import random
 import os
 
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 config = ConfigParser.ConfigParser()
@@ -26,16 +26,18 @@ VIDEO_LIST = config.get('trace', 'video_list')
 
 
 class Job:
-    def __init__(self, process_id, stream_id, frame_id, start_ts, end_ts, job_config):
+    def __init__(self, process_id, stream_id, frame_id, emit_ts, start_ts, end_ts, job_config):
         self.process_id = process_id
         self.stream_id = stream_id
         self.frame_id = frame_id
+        self.emit_ts = emit_ts
         self.start_ts = start_ts
         self.end_ts = end_ts
         self.config = job_config
         self.config['job_util'] = self.get_job_util()
+
     def __str__(self):
-        return 'stream:' + str(self.stream_id) + ' frame_id:' + str(self.frame_id) + ' start_ts:' + str(self.start_ts) + ' end_ts:' + str(self.end_ts)
+        return 'process_id:' + str(self.process_id) + ' stream:' + str(self.stream_id) + ' frame_id:' + str(self.frame_id) + ' emit_ts:' + str(self.emit_ts) +  ' start_ts:' + str(self.start_ts) + ' end_ts:' + str(self.end_ts)
 
     def get_job_util(self):
         return self.config['compute_flop']/((self.config['cpu_comp_lat']/1000.) * 1.0)
@@ -55,6 +57,9 @@ class Machine:
         self.jobs = [] 
         self.cpu_util_log = []  
  
+    def __str__(self):
+        return 'machine_id:' + str(self.machine_id) + ' mem_remaining (%):' + str((self.mem_remaining* 100)/self.MEM_LIM) + ' cpu_util (%):' + str((self.cpu_util * 100)/self.CPU_LIM)
+
     def get_status(self):
 
         m_status = {'mem_remain_byte': self.mem_remaining, 'mem_util_prec': (self.MEM_LIM - self.mem_remaining)/(self.MEM_LIM * 1.0), 'cpu_util_flop': self.cpu_util, 'cpu_util_prec': self.cpu_util/(self.CPU_LIM * 1.0), 'mem_lim': self.MEM_LIM, 'cpu_lim': self.CPU_LIM}
@@ -73,13 +78,14 @@ class Machine:
 
         return True 
 
-    def run(self, scheme, job):
+    def run(self, scheme, job, cur_ts):
 
         if scheme == 'nsp': 
             if self.does_job_fit(job):
                 self.mem_remaining -= job.config['mem_req'] 
                 # TODO: verify the variable
                 self.cpu_util += job.config['job_util']
+                job.start_ts = cur_ts 
                 job.end_ts = job.start_ts + job.config['cpu_comp_lat']
                 self.jobs += [job]
                 return True
@@ -95,7 +101,7 @@ class Machine:
                 self.mem_remaining += job.config['mem_req'] 
                 self.cpu_util -= job.get_job_util()
                 finished_pids += [idx]
-                logger.info('Mach(%d) finished processing Job(%s)', self.machine_id, job)
+                #logger.info('Mach(%d) finished processing Job(%s)', self.machine_id, job)
         for idx in reversed(finished_pids):
             del self.jobs[idx] # remove process
 
@@ -144,16 +150,16 @@ class Cloud:
        
          
         if machine_status['mem_remain_byte'] - job.config['mem_req'] < 0:
-            logger.debug('Exceed mem util -- remain mem: %f, job mem req: %f', machine_status['mem_remain_byte'] , job.config['mem_req'])
+            #logger.debug('Exceed mem util -- remain mem: %f, job mem req: %f', machine_status['mem_remain_byte'] , job.config['mem_req'])
             return False
 
         if machine_status['cpu_util_flop'] + job.config['job_util']  > machine_status['cpu_lim']:
-            logger.debug('Exceed cpu util -- Cur CPU util: %f, job util: %f', machine_status['cpu_util_flop'],  job.config['job_util'])
+            #logger.debug('Exceed cpu util -- Cur CPU util: %f, job util: %f', machine_status['cpu_util_flop'],  job.config['job_util'])
             return False
 
         return True
 
-    def schedule(self, job_queue):
+    def schedule(self, job_queue, cur_ts):
         if self.scheme == 'nsp':
             # FCFS (cause all jobs have the same remaining time) 
             job_queue = sorted(job_queue, key = lambda x: x.start_ts)
@@ -166,13 +172,18 @@ class Cloud:
                     machine_statuses[mid] = machine.get_status()
                 for mid in machine_statuses:
                     if self.does_machine_fit(machine_statuses[mid], job):
-                        success = self.machines[mid].run(self.scheme, job)
+                        success = self.machines[mid].run(self.scheme, job, cur_ts)
                         if not success:
-                            logger.error('Error placing Job(%s) on Mach(%d)', job,  mid)
+                            logger.error('Error placing Job(%s) on Mach(%s)', job, self.machines[mid] )
                             exit(-1)
                         else:
                             # schedule the next job
-                            logger.info('Schedule Job(%s) on Mach(%d)', job, mid)
+                            ###
+                            if len(start_jobs) == 0:
+                                logger.info('%d -- Schedule', cur_ts)                            
+                            ###
+
+                            logger.info('%d -- Schedule Job(%s) on Mach(%s)', cur_ts, job, self.machines[mid])
                             start_jobs += [jid]    
                             break
             for jid in reversed(start_jobs):
@@ -184,8 +195,20 @@ class Cloud:
         if self.scheme == 'nsp':
             finished_jobs = []
             for m in self.machines:
-                fj = self.machines[m].update(cur_ts)
-                finished_jobs += fj
+                fjs = self.machines[m].update(cur_ts)
+                
+                ###
+                if len(finished_jobs) == 0 and len(fjs) > 0:
+                    logger.info('%d -- Update', cur_ts)
+             
+                if len(fjs) > 0: 
+                    fj_str = ''
+                    for fj in fjs:
+                        fj_str += 'Job(' + str(fj) + ')\n'
+                 
+                    logger.info('Mach(%s) finished processing %s', self.machines[m], fj_str)
+                ###
+                finished_jobs += fjs
  
             return finished_jobs
 
@@ -239,29 +262,39 @@ def run_scheme(scheme):
         cur_fid = cur_ts / 33
         
         # add jobs into queue
+        has_added_job = False
         for sid, stream_name in enumerate(streams):
             if cur_ts % 33 == 0 and cur_fid in stream_trace[stream_name]:
 
                 # create a job
                 job_config = GLOBAL.get_job_config()
-                job = Job(pid, sid, cur_fid, cur_ts, -1, job_config)
+                job = Job(pid, sid, cur_fid, cur_ts, -1, -1, job_config)
                 if cur_ts in stream_process_log[sid].keys():
                     logger.error('This job has been dispatched before')
                     eixt(-1)
-                stream_process_log[sid][cur_ts] = -1
+                stream_process_log[sid][cur_ts] = (-1, -1)
 
                 pid += 1
                 job_queue += [job]
+                has_added_job = True
 
+        if has_added_job:
+            job_str = ''
+            for job in job_queue:
+                job_str += str(job) + '\n'
+            logger.info('%d -- job queue: %s', cur_ts, job_str)
             
         # cloud processes job queue, update machine occupancy
         finished_jobs = cloud.update(cur_ts)
+        
+
         for fj in finished_jobs:
             #print fj
-            stream_process_log[fj.stream_id][fj.start_ts] = fj.end_ts
+            stream_process_log[fj.stream_id][fj.emit_ts] = (fj.start_ts, fj.end_ts)
 
-        job_queue = cloud.schedule(job_queue)
-  
+        prev_q_size = len(job_queue)
+        job_queue = cloud.schedule(job_queue, cur_ts)
+ 
         cur_ts += 1 
     print stream_process_log
         
