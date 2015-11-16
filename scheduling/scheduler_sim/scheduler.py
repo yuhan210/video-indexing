@@ -8,14 +8,14 @@ import os
 config = ConfigParser.ConfigParser()
 config.read('sim.conf')
 
-N_STREAMS = config.get('sim', 'n_streams')
-SIM_LEN = config.get('sim', 'sim_len')
-MACHINE_MEMORY = config.get('machine', 'memory')
-MACHINE_CORE = config.get('machine', 'n_core')
-MACHINE_COMPUTE = config.get('machine', 'flop')
-N_MACHINE = config.get('machine', 'n_machine')
+N_STREAMS = int(config.get('sim', 'n_streams'))
+SIM_LEN = int(config.get('sim', 'sim_len'))
+MACHINE_MEMORY = float(config.get('machine', 'memory'))
+MACHINE_CORE = int(config.get('machine', 'n_core'))
+MACHINE_COMPUTE = float(config.get('machine', 'flop'))
+N_MACHINE = int(config.get('machine', 'n_machine'))
 GREEDY_TRACE = config.get('trace', 'greedy_trace')
-GREEDY_THRESH = config.get('trace', 'thresh')
+GREEDY_THRESH = float(config.get('trace', 'thresh'))
 VIDEO_LIST = config.get('trace', 'video_list')
 
 
@@ -29,6 +29,8 @@ class Job:
         self.end_ts = end_ts
         self.config = job_config
         self.config['job_util'] = self.get_job_util()
+    def __str__(self):
+        return 'stream:' + str(self.stream_id) + ' frame_id:' + str(self.frame_id) + ' start_ts:' + str(self.start_ts) + ' end_ts:' + str(self.end_ts)
 
     def get_job_util(self):
         return self.config['compute_flop']/((self.config['cpu_comp_lat']/1000.) * 1.0)
@@ -57,7 +59,7 @@ class Machine:
        
         # TODO: one process per core? 
         # check if adding this job exceeds mem capacity
-        if self.mem_remaining + job.config['mem_req'] > self.MEM_LIM:
+        if self.mem_remaining - job.config['mem_req'] < 0 :
             return False
 
         # check if adding this job exceeds cpu util
@@ -70,25 +72,27 @@ class Machine:
 
         if scheme == 'nsp': 
             if self.does_job_fit(job):
-                self.mem_remaining -= job.config.mem_req 
+                self.mem_remaining -= job.config['mem_req'] 
                 # TODO: verify the variable
-                self.cpu_util += job.get_job_util
-                job.end_ts = job.start_ts + job.config.cpu_comp_lat
+                self.cpu_util += job.config['job_util']
+                job.end_ts = job.start_ts + job.config['cpu_comp_lat']
                 self.jobs += [job]
                 return True
             return False
 
     def update(self, cur_ts):    
         finished_jobs = []
+        finished_pids = []
         for idx, job in enumerate(self.jobs): 
             if job.end_ts < cur_ts:
-                finished_jobs = [job]
-                
+                finished_jobs += [job]
                 # release memory and decrease cpu util 
-                self.mem_remaining += job.config.mem_req 
+                self.mem_remaining += job.config['mem_req'] 
                 self.cpu_util -= job.get_job_util()
-
-                del m.processes[idx] # remove process
+                finished_pids += [idx]
+                print 'Machine', self.machine_id, 'Finished processing', job
+        for idx in reversed(finished_pids):
+            del self.jobs[idx] # remove process
 
         return finished_jobs
         
@@ -131,12 +135,15 @@ class Cloud:
         for i in xrange(self.n_machine):
             self.machines[i] = Machine(i)
 
-    def does_machine_fit(machine_status, job):
-        
-        if machine_status['mem_remain_byte'] + job.config['mem_req'] > machine_status['mem_lim']:
+    def does_machine_fit(self, machine_status, job):
+       
+         
+        if machine_status['mem_remain_byte'] - job.config['mem_req'] < 0:
+            #print 'Exceed mem util: remain mem:', machine_status['mem_remain_byte'] , ' mem_req:', job.config['mem_req']
             return False
 
         if machine_status['cpu_util_flop'] + job.config['job_util']  > machine_status['cpu_lim']:
+            #print 'Exceed cpu utilization: cur util:', machine_status['cpu_util_flop'], ' job util:', job.config['job_util']
             return False
 
         return True
@@ -145,29 +152,34 @@ class Cloud:
         if self.scheme == 'nsp':
             # FCFS (cause all jobs have the same remaining time) 
             job_queue = sorted(job_queue, key = lambda x: x.start_ts)
-            # Check machine availability
-            machine_statuses = {}
-            for mid in self.machines:
-                machine = self.machines[mid]
-                machine_statuses[mid] = machine.get_status()
-           
-            for j in job_queue:
+
+            start_jobs = [] 
+            for jid, job in enumerate(job_queue):
+                machine_statuses = {}
+                for mid in self.machines:
+                    machine = self.machines[mid]
+                    machine_statuses[mid] = machine.get_status()
                 for mid in machine_statuses:
-                    if does_machine_fit(machine_statuses[mid], job):
+                    if self.does_machine_fit(machine_statuses[mid], job):
                         success = self.machines[mid].run(self.scheme, job)
-                        if not suc:
-                            print 'Error placing ', job.process_id, 'on machine', mid
+                        if not success:
+                            print 'Error placing', job.process_id, 'on machine', mid
                             exit(-1)
                         else:
                             # schedule the next job
+                            print 'Schedule', job, 'on', mid
+                            start_jobs += [jid]    
                             break
+            for jid in reversed(start_jobs):
+                del job_queue[jid]
 
+            return job_queue
 
     def update(self, cur_ts):
         if self.scheme == 'nsp':
             finished_jobs = []
             for m in self.machines:
-                fj = m.update()
+                fj = self.machines[m].update(cur_ts)
                 finished_jobs += fj
  
             return finished_jobs
@@ -192,11 +204,16 @@ def run_scheme(scheme):
             selected_frame_obj = pickle.load(gt_fh)
             stream_trace[video_name] = selected_frame_obj['picked_f']
 
-    # select N_STREAMS (TODO: might need to determine whether this stream is specializable)
-    while len(videos) < N_STREAMS:
-        videos += videos
+    # select N_STREAMS (TODO: might need to determine whether this stream is specializable)i
+    streams = []
+    streams += videos
+    while True:
+        if len(streams) > N_STREAMS:
+            break
+        streams += videos
 
-    streams = random.select(videos, N_STREAMS)
+    print len(streams), N_STREAMS
+    streams = random.sample(streams, N_STREAMS)
     #####
 
     cloud = Cloud(scheme)
@@ -206,19 +223,23 @@ def run_scheme(scheme):
     pid = 0
     
     job_queue = []
-    stream_process_log = dict.fromkeys(range(len(streams))) # a dict (key: sid) of dict (key: start_ts, value: end_ts)
-    while (cur_ts < sim_len):   
+    stream_process_log = dict([(key, {}) for key in range(len(streams))])
+    #stream_process_log = dict.fromkeys(range(len(streams))) # a dict (key: sid) of dict (key: start_ts, value: end_ts)
+    print 'Simulation starts'
+
+    for stream_name in streams:
+        print stream_name, stream_trace[stream_name]
+    while (cur_ts < SIM_LEN):
         cur_fid = cur_ts / 33
         
         # add jobs into queue
         for sid, stream_name in enumerate(streams):
-            if cur_fid in stream_trace[stream_name]:
+            if cur_ts % 33 == 0 and cur_fid in stream_trace[stream_name]:
 
                 # create a job
-                job_config = GLOBAL.get_job_config(scheme)
+                job_config = GLOBAL.get_job_config()
                 job = Job(pid, sid, cur_fid, cur_ts, -1, job_config)
-
-                if cur_ts in stream_process_log[sid]:
+                if cur_ts in stream_process_log[sid].keys():
                     print 'Error:This job has been dispatched before'
                     eixt(-1)
                 stream_process_log[sid][cur_ts] = -1
@@ -228,8 +249,9 @@ def run_scheme(scheme):
 
             
         # cloud processes job queue, update machine occupancy
-        finished_jobs = cloud.update()
+        finished_jobs = cloud.update(cur_ts)
         for fj in finished_jobs:
+            print fj
             stream_process_log[fj.stream_id][fj.start_ts] = fj.end_ts
 
         job_queue = cloud.schedule(job_queue)
