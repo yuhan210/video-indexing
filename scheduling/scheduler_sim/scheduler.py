@@ -6,6 +6,8 @@ import pickle
 import random
 import os
 
+import matplotlib
+import matplotlib.pyplot as plt
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
@@ -113,6 +115,7 @@ class Machine:
         return finished_jobs
         
 class Global:
+
     def __init__(self, scheme):   
         self.scheme = scheme
         ### 
@@ -165,8 +168,17 @@ class Cloud:
     def get_cloud_util(self):
 
         machine_statuses = self.get_machine_statues()
+        total_cpu_util, total_mem_util, total_cpu_aval, total_mem_aval = [0.0] * 4
         for mid in machine_statuses:          
-            machine_statuses[mid] 
+            total_mem_util += machine_statuses[mid]['mem_util_byte']
+            total_mem_aval += machine_statuses[mid]['mem_lim']
+            
+            total_cpu_util += machine_statuses[mid]['cpu_util_flop']
+            total_cpu_aval += machine_statuses[mid]['cpu_lim']
+
+        cloud_util = {'mem_util_prec': total_mem_util/(total_mem_aval * 1.0), 'cpu_util_prec': total_cpu_util/(total_cpu_aval * 1.0)}
+
+        return cloud_util
 
     def does_machine_fit(self, machine_status, job):
        
@@ -180,6 +192,7 @@ class Cloud:
             return False
 
         return True
+
 
     def schedule(self, job_queue, cur_ts):
         if self.scheme == 'nsp':
@@ -213,12 +226,13 @@ class Cloud:
             return job_queue
 
     def update(self, cur_ts):
+
         if self.scheme == 'nsp':
             finished_jobs = []
             for m in self.machines:
                 fjs = self.machines[m].update(cur_ts)
                 
-                ###
+                ### For logging
                 if len(finished_jobs) == 0 and len(fjs) > 0:
                     logger.info('%d -- Update', cur_ts)
              
@@ -272,7 +286,7 @@ def run_scheme(scheme):
     
     job_queue = []
     stream_process_log = dict([(key, {}) for key in range(len(streams))])
-    #cloud_util_log  
+    cloud_util_log = {} # key: ts, value: cloud_util
     #stream_process_log = dict.fromkeys(range(len(streams))) # a dict (key: sid) of dict (key: start_ts, value: end_ts)
     print 'Simulation starts'
 
@@ -318,12 +332,29 @@ def run_scheme(scheme):
         
         # cloud schedules job in the queue
         job_queue = cloud.schedule(job_queue, cur_ts)
-
-        machine_statuses = cloud.get_machine_statues() 
+        cloud_util = cloud.get_cloud_util()
+        cloud_util_log[cur_ts] = cloud_util
+ 
         cur_ts += 1 
 
     print stream_process_log
-        
+    plot_cloud_util_log(cloud_util_log) 
+
+
+#def compute_stream_
+
+def plot_cloud_util_log(cloud_util_log):
+    
+    ts = sorted(cloud_util_log.keys())
+    fig = plt.figure() 
+    ax = fig.add_subplot(1, 1, 1)
+    ax.plot(ts, [cloud_util_log[x]['mem_util_prec'] * 100 for x in cloud_util_log], color = 'b', label = 'Memory') 
+    ax.plot(ts, [cloud_util_log[x]['cpu_util_prec'] * 100 for x in cloud_util_log], color = 'r', label = 'CPU')
+    ax.set_xlabel('Time (ms)')
+    ax.set_ylabel('Utilization (%)') 
+    ax.legend(loc = 'best')
+    plt.show()
+
 if __name__ == "__main__":
 
     scheme = 'nsp'
