@@ -1,0 +1,31 @@
+package csail.yuhan.panorama;
+
+
+enum RequestType {
+    FACE = 1;
+    OBJECT = 2;
+};
+
+
+
+message ModelParameter
+{
+    optional string name = 1;
+    required RequestType type = 2;
+    optional string compute = 3;
+    optional string memory = 4;
+    optional float loading_latency = 5;
+    optional float accuracy = 6;
+    optional float compute_latency = 7;
+    optional float cpu_compute_latency = 8;
+    optional float compute_energy = 9;
+    optional float s_compute_latency = 10;
+    optional float s_loading_latency = 11;
+    optional float loading_energy = 12;
+};
+
+message ApplicationModel
+{
+    optional string name = 1;
+    repeated ModelParameter models = 2;
+}
