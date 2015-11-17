@@ -15,21 +15,7 @@ try:
 except:
     pass
 
-
-def plot_scores(video_name, start_fids, end_fids, greedy_scores, uniform_scores, greedy_fids, uniform_fids, greedy_sample_rate, uniform_sample_rate):
-    plt.figure(figsize=(13,11))
-    plt.plot(end_fids, greedy_scores[0:len(end_fids)], 'ro-', label = 'Greedy Accuracy')
-    plt.plot(end_fids, uniform_scores[0:len(end_fids)], 'b-o', label = 'Uniform Accuracy')
-    plt.scatter(greedy_fids, [0.1 for x in xrange(len(greedy_fids))] , color = 'red', label = 'Greedy processed frame ID')
-    plt.scatter(uniform_fids, [0.05 for x in xrange(len(uniform_fids))] , color = 'blue', label = 'Uniform processed frame ID')
-    plt.text(10, 1.1, 'Greedy subsample rate:' + str(greedy_sample_rate) + '\n Uniform subsample rate:' + str(uniform_sample_rate),fontsize = 15)
-
-    plt.title(video_name)
-    plt.legend(loc = 4)
-    plt.savefig('/home/t-yuche/admission-control/eval/anec-figs/thresh_08/' + video_name + '.png', dpi = 100)
-    #plt.show()
-    return 
-
+COSSIM_THRESH = 0.05
 
 def get_combined_tfs(tfs_dict):
 
@@ -194,39 +180,33 @@ def get_greedy_ave_samplerate(file_name = '/home/t-yuche/admission-control/tools
 if __name__ == "__main__":
 
     if len(sys.argv) != 3:
-        print 'Usage: ', sys.argv[0], ' process_video_id'
+        print 'Usage: ', sys.argv[0], ' subsample_rate process_video_id'
         exit(11)
     
     tic = time.time()
-    THRESH = float(sys.argv[1])
     pvid = int(sys.argv[2])-1
+    BASELINE_SAMPLERATE = float(sys.argv[1])
 
     SERVER_STORAGE_FRAMES = 5 * 30 # 5 sec * 30 fps
     SLIDE_SIZE_FRAMES = 1 * 30 # 1 sec * 30 fps
+    UNIMPORTANTWORD_THRESH = 0.5
     OUTPUT_FOLDER = '/home/t-yuche/admission-control/eval/greedy-results' 
-    #THRESH = 0.8
-    UNIMPORTANTWORD_THRESH = 0.2
-    #sample_rate_dict = get_greedy_ave_samplerate() 
-    #BASELINE_SAMPLERATE = sample_rate_dict[THRESH]
-    BASELINE_SAMPLERATE = -1
 
     # fixed #
-    GREEDY_INPUT_FOLDER = '/home/t-yuche/admission-control/greedy/window-greedy-log-' + str(UNIMPORTANTWORD_THRESH)
     OPTIMAL_INPUT_FOLDER = '/home/t-yuche/admission-control/eval/optimal-log/optimal-tf'
     VIDEO_LIST = '/mnt/video_list.txt'
     videos = open(VIDEO_LIST).read().split()
     
     
-    greedy_scores = []
+    uniform_scores = []
     for vid, video_name in enumerate(videos):
 
         if vid != pvid:
             continue
         print vid, video_name
  
-       
         # safe rerun
-        outgreedypath = os.path.join(OUTPUT_FOLDER, video_name + '_greedy_' + str(THRESH) + '_' + str(BASELINE_SAMPLERATE) + '.pickle')
+        outuniformpath = os.path.join(OUTPUT_FOLDER, video_name + '_uniform_' + str(0) + '_' + str(BASELINE_SAMPLERATE) + '.pickle')
         #if os.path.exists(outgreedypath) and os.path.exists(outuniformpath):
         #    continue    
    
@@ -234,22 +214,15 @@ if __name__ == "__main__":
         # load all models 
         rcnn_dict, vgg_dict, fei_caption_dict, msr_cap_dict, dummy = load_all_modules_dict(video_name)
         frame_paths = sorted(vgg_dict, key = lambda x: int(x.split('/')[-1].split('.')[0])) 
-
-        # load greedy subsampled frames
-        greedy_gt_path = os.path.join(GREEDY_INPUT_FOLDER, video_name +  '_' + str(THRESH) + '_gtframe.pickle')
-        with open(greedy_gt_path) as gt_fh:
-            selected_frame_obj = pickle.load(gt_fh)
-            greedy_frames = [ str(x) + '.jpg' for x in selected_frame_obj['picked_f']]
-            video_len_f = selected_frame_obj['total_frame']
-            subsampled_rate = selected_frame_obj['picked_rate']
+        video_len_f = len(rcnn_dict)
+        # baseline
+        uniform_frames = naive_subsample_frames(os.listdir(os.path.join('/mnt/frames', video_name)), BASELINE_SAMPLERATE) 
 
         # load optimal tfs
         with open(os.path.join(OPTIMAL_INPUT_FOLDER, video_name + '_' + str(UNIMPORTANTWORD_THRESH) + '.pickle')) as fh:
             optimal_data = pickle.load(fh)
 
-        # sliding window  
-        start_fids = []
-        end_fids = []
+        # sliding window   
         video_start_fid = 0
         video_end_fid = 0
         while True:
@@ -262,38 +235,21 @@ if __name__ == "__main__":
  
             ''' Optimal '''
             optimal_tf = optimal_data[key]
-            #print optimal_tf
     
             ''' Uniform '''
-            '''
             uni_range_fids = get_inrange_fids(video_start_fid, video_end_fid, uniform_frames)
             uniform_inrange_frames = [os.path.join('/mnt/frames', video_name, str(x) + '.jpg') for x in uni_range_fids] 
             uniform_tf_list = combine_all_modeldicts(vgg_dict, msr_cap_dict, rcnn_dict, fei_caption_dict, uniform_inrange_frames)
             uniform_tf = get_combined_tfs(uniform_tf_list)
             uniform_score = detailed_measure(optimal_tf, uniform_tf) 
-            '''
 
-            ''' Greedy '''
-            greedy_range_fids = get_inrange_fids(video_start_fid, video_end_fid, greedy_frames)
-            greedy_inrange_frames = [os.path.join('/mnt/frames', video_name, str(x) + '.jpg') for x in greedy_range_fids] 
-            greedy_tf_list = combine_all_modeldicts(vgg_dict, msr_cap_dict, rcnn_dict, fei_caption_dict, greedy_inrange_frames)
-            greedy_tf = get_combined_tfs(greedy_tf_list)
-            greedy_score = detailed_measure(optimal_tf, greedy_tf) 
-
-            #print greedy_tf 
-            #print uniform_score, greedy_score
-
-            greedy_scores += [greedy_score]
-            start_fids += [video_start_fid]
-            if video_end_fid not in end_fids:
-                end_fids += [video_end_fid]
+            uniform_scores += [uniform_score]
             video_start_fid +=  SLIDE_SIZE_FRAMES 
-        
-        #plot_scores(video_name, start_fids, end_fids, greedy_scores, uniform_scores, selected_frame_obj['picked_f'], [int(x.split('.')[0]) for x in uniform_frames], subsampled_rate, BASELINE_SAMPLERATE)
-        with open(outgreedypath, 'wb') as fh:
-            pickle.dump(greedy_scores, fh)
+
+        with open(outuniformpath, 'wb') as fh:
+            pickle.dump(uniform_scores, fh)
         break
     toc = time.time()
     print 'Exec time:', toc-tic
     print 'video_name:', video_name
-    print 'greedy_score:', np.mean(greedy_scores)
+    print 'uniform score:', np.mean(uniform_scores)
