@@ -1,5 +1,6 @@
 # train various training/testing partition
 from svm_utils import *
+import random
 import os
 
     
