@@ -1,10 +1,11 @@
-from utils import *
+from svm_utils import *
 from vision import *
 import pickle
 import sys
 sys.path.append('../liblinear/python')
 from svmutil import *
 import sys
+from utils import *
 
 ENC_TYPE = 1
 IMG_WIDTH = 2
@@ -21,41 +22,11 @@ PHASH = 12
 COLORHIST = 13
 SIFTMATCH = 14
 SURFMATCH = 15
+DIST_FROM_PFID = 16
 
 PRED_TRACELOG = './pred-trace'
 MV_INPUT_FOLDER = '/home/t-yuche/admission-control/train/mv_log'
 
-def load_range_file(scale_file):
-   
-    scale_value = {}
-    with open(scale_file) as f:
-        for line in f.readlines():
-            line = line.strip()
-            segs = line.split(' ') 
-            if line.split(' ') == 3:
-                idx = int(segs[0])
-                min_v = int(segs[1])
-                max_v = int(segs[2])
-                scale_value[idx] = (min_v, max_v)
-
-    return scale_value
-
-def scale_feature(sample):
-    upper = 1.0
-    lower = -1.0
-
-    for fid in sample:
-        value = sample[fid]
-        if fid in range_value.key():
-            if value <= scale_value[0]:
-                value = lower
-            elif value >= scale_value[1]:
-                value = upper
-            else:
-                value = lower + (upper - lower) * (value - scale_value[0])/(scale_value[1] - scale_value[0])
-        sample[fid] = value
-
-    return sample
 
 def predict_video(video_name, svm_model):
    
@@ -75,10 +46,11 @@ def predict_video(video_name, svm_model):
     prev_fid = 0
     for fid in xrange(1, n_frames):
         frame_name = str(fid) + '.jpg'
-        prev_frame_name = str(prev_fid) + 'jpg' 
+        prev_frame_name = str(prev_fid) + '.jpg' 
         # generate features
         #### single frame features
         enc = encdata[frame_name]
+        x = {}
         if enc['type'] == 'P': 
             x[ENC_TYPE] = 0
         else:
@@ -119,25 +91,29 @@ def predict_video(video_name, svm_model):
         x[IMG_HEIGHT] = h
         x[ENC_SIZE] = enc['size']
         x[MV_SIZE] = mv[0] 
-        x[MV_MEAN] = mv[fid][1]
-        x[MV_MAX] = mv[fid][2]
-        x[MV_MIN] = mv[fid][3]
+        x[MV_MEAN] = mv[1]
+        x[MV_MAX] = mv[2]
+        x[MV_MIN] = mv[3]
         x[SOBEL] = cv['sobel'][0]
         x[ILLU] = cv['illu'][0]
         x[FRAME_DIFF] = framediff_prec
         x[PHASH] = phash_v
-        x[COLORHIST] = hist_scor
+        x[COLORHIST] = hist_score
         x[SIFTMATCH] = sift_score
         x[SURFMATCH] = surf_score
-  
+        x[DIST_FROM_PFID] = fid - prev_fid 
  
         # predict if we should pick this frame 
         # scale feature
-        x = scale_feature(x) 
-         
-        # predict
-        p_label, dummy, dummy = svm_predict([1], x, svm_model)
+        # print x
+        x = scale_feature(x, range_value) 
 
+        print video_name, fid, x 
+        # predict
+        p_label, dummy, dummy = svm_predict([1], [x], svm_model)
+        
+        p_label = p_label[0]
+        print p_label
         if int(p_label) == 1:
             selected_fids += [fid]
             prev_fid = fid
@@ -146,20 +122,32 @@ def predict_video(video_name, svm_model):
 
 if __name__ == "__main__":
 
-    videos = open('/mnt/video_list.txt').read().split()
-    model_name = './models/svm_train.model'
-    model = svm_load_model(model_name)
-
     if len(sys.argv) != 2:
-        print 'Usage:', sys.argv[0], 'range_file'
-        exit()
+        print 'Usage:', sys.argv[0], 'model_path'
+        exit()   
+ 
+    model_name = sys.argv[1]
 
-    range_file = sys.argv[1]
-   
+    model = svm_load_model(model_name)
+    if model_name[-1] == '/':
+        model_name = model_name[0:-1]
+    model_fname = model_name.split('/')[-1]
+
+    #svm_train_0.4_8733_3_0_10.model
+    output_trace_foldername=  os.path.join(PRED_TRACELOG, 'trace_' +  model_fname[10:-6])
+    if not os.path.exists(output_trace_foldername):
+        os.makedirs(output_trace_foldername)
+ 
     global range_value 
-    range_value = load_range_file(range_file) 
+    range_value = load_range_file() 
  
   
+    videos = open('/mnt/video_list.txt').read().split()
     for video_name in videos: 
-        pred_trace = predict_video(video_name, model) 
+        pred_trace = predict_video(video_name, model)
+        print pred_trace 
         #TODO: store predicted trace 
+        with open(os.path.join(output_trace_foldername, video_name + '.pickle'), 'wb') as fh:
+            fh.dump(pred_trace, fh)
+        exit() 
+
