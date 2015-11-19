@@ -1,0 +1,7 @@
+Two parameters while generating the training data
+1. N: The percenage of training data (n_pos_sample * N)
+2. R: The ratio of pos samples to neg samples
+
+Two parameters when do SVM training
+1. -t
+2. -c
