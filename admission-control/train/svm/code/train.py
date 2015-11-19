@@ -7,8 +7,12 @@ DATA_FOLDER = 'data'
 MODEL_FOLDER = 'models'
 
 def train_model(train_data_path, model_output_path, PARAM):
+
+    if os.path.exists(model_output_path):
+        return
     y, x = svm_read_problem(train_data_path)
     m = svm_train(y, x, '-t ' + PARAM['-t'] + ' -c ' + PARAM['-c']) 
+
 
     svm_save_model(model_output_path, m)
 
