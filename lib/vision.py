@@ -1,3 +1,4 @@
+import os
 import cv2
 import json
 import math
@@ -6,6 +7,18 @@ import pickle
 from PIL import Image
 import imagehash
 
+def get_video_fps(video_name):
+
+    video_path = os.path.join('/mnt/videos', video_name)
+    if video_path.find('.mp4') < 0:
+        video_path += '.mp4'
+
+    cap = cv2.VideoCapture(video_path)    
+    fps  = cap.get(cv2.cv.CV_CAP_PROP_FPS) 
+    w  = int(cap.get(cv2.cv.CV_CAP_PROP_FRAME_WIDTH))
+    h  = int(cap.get(cv2.cv.CV_CAP_PROP_FRAME_HEIGHT))
+ 
+    return fps, w, h
 
 def colorHistSim(a, b):
     a = cv2.cvtColor(a, cv2.COLOR_BGR2HSV)
@@ -23,9 +36,9 @@ def colorHistSim(a, b):
 
 def filter_matches(matches):
     good = []
-    for m, n in matches:
-        if m.distance < 0.75 * n.distance:
-            good.append([m])
+    for m in matches:
+        if len(m) == 2 and m[0].distance < 0.75 * m[1].distance:
+            good.append([m[0]])
     return good
 
 
@@ -36,13 +49,13 @@ def getSIFTMatchingSim(a, b):
     sift = cv2.SIFT()
     kp1, des1 = sift.detectAndCompute(a, None)
     kp2, des2 = sift.detectAndCompute(b, None)
-     
+    if len(kp1) == 0 or len(kp2) == 0:
+        return 0
+
     bf = cv2.BFMatcher()
     matches = bf.knnMatch(des1, des2, k = 2)
     good_matches = filter_matches(matches)
 
-    if len(kp1) == 0:
-        return -1
     return len(good_matches)/(len(kp1) * 1.0)
 
 
@@ -53,15 +66,42 @@ def getSURFMatchingSim(a, b):
     surf = cv2.SURF()
     kp1, des1 = surf.detectAndCompute(a, None)
     kp2, des2 = surf.detectAndCompute(b, None)
+    if len(kp1) == 0 or len(kp2) == 0:
+        return 0
      
     bf = cv2.BFMatcher()
     matches = bf.knnMatch(des1, des2, k = 2)
     good_matches = filter_matches(matches)
     
-    if len(kp1) == 0:
-        return -1
     return len(good_matches)/(len(kp1) * 1.0)
 
+def parseMVs_normalized(video_name, folder = '/mnt/tags/video-encoding-info'):
+
+    fps, w, h = get_video_fps(video_name)
+    mvdata = {}
+    with open(os.path.join(folder, video_name + '_mvs.txt')) as fh:
+        for idx, line in enumerate(fh.readlines()):
+            if idx == 0:
+                continue
+            segs = line.split(',')
+            segs = [x.strip() for x in segs]
+            framename = segs[0] + '.jpg'
+            source = int(segs[1])
+            blockw = int(segs[2])
+            blockh = int(segs[3])
+            srcx = int(segs[4])
+            srcy = int(segs[5])
+            dstx = int(segs[6])
+            dsty = int(segs[7])
+
+            x_mov = (dstx - srcx) / (w * 1.0)
+            y_mov = (dsty - srcy) / (h * 1.0)
+            dist = math.sqrt(x_mov**2 + y_mov**2)
+            if framename not in mvdata:
+                mvdata[framename] = []
+            mvdata[framename] += [dist]
+
+    return mvdata
 
 def parseMVs(video_name, folder = '/mnt/tags/video-encoding-info'):
 
@@ -126,24 +166,30 @@ if __name__ == "__main__":
     VIDEO_LIST = '/mnt/video_list.txt'
     PROCESSED_FOLDER = '/mnt/tags/cv-processed-info'
     for video_name in open(VIDEO_LIST).read().split():
+
         print video_name 
-        mvpath = os.path.join(PROCESSED_FOLDER, video_name + '_mv.pickle')
-        encpath = os.path.join(PROCESSED_FOLDER, video_name +'_enc.pickle')
-        if os.path.exists(mvpath) and os.path.exists(encpath):
+        mvpath = os.path.join(PROCESSED_FOLDER, video_name + '_mv_norm.pickle')
+        if os.path.exists(mvpath):
             continue
 
-        mv_data = parseMVs(video_name)
-        encoding_data = parseVideoProbeLog(video_name)
+        mv_data = parseMVs_normalized(video_name)
 
-        with open(os.path.join(PROCESSED_FOLDER, video_name + '_mv.pickle'), 'wb') as fh:
+        with open(mvpath, 'wb') as fh:
             pickle.dump(mv_data, fh)
 
-        with open(os.path.join(PROCESSED_FOLDER, video_name +'_enc.pickle'), 'wb') as fh:
-            pickle.dump(encoding_data, fh)
+
+def getBTFrameInfoFromLog(video_name, folder = '/mnt/tags/cv-btframe-08'):
+    #data[frame_name] = {'framediff': [framediff_prec, framediff_time], 'phash': [phash_value, phash_time], 'colorhist': [hist_score, hist_time], 'siftmatch': [sift_score, sift_time], 'surftime': [surf_score, surf_time]}
+
+    with open(os.path.join(folder, video_name + '.pickle')) as fh:
+        btfdata = pickle.load(fh)
+
+    return btfdata
 
 def getCVInfoFromLog(video_name, folder = '/mnt/tags/cv-info'):
     #data[frame_name] = {'sobel': [sobel, sobeltime], 'illu': [illu, illutime]}
-    
+    #exectime in res. max( 320 x 240, original size)
+
     with open(os.path.join(folder, video_name + '.pickle')) as fh:
         cvdata = pickle.load(fh)
 
@@ -151,6 +197,31 @@ def getCVInfoFromLog(video_name, folder = '/mnt/tags/cv-info'):
 
 def getCompressedInfoFromLog(video_name, folder = '/mnt/tags/cv-processed-info'):
     with open(os.path.join(folder, video_name + '_mv.pickle')) as fh:
+        mvdata = pickle.load(fh)
+    
+    with open(os.path.join(folder, video_name + '_enc.pickle')) as fh:
+        encdata = pickle.load(fh)
+
+    # if a frame is not in mvdata. there's no motion vector
+    return mvdata, encdata
+
+def getMetadata(video_name, folder = '/mnt/tags/cv-processed-info'):
+    
+    with open(os.path.join(folder, video_name + '_enc.pickle')) as fh:
+        encdata = pickle.load(fh)
+    return encdata
+
+
+def getNormCompressedInfoFromLog(video_name, folder = '/mnt/tags/cv-processed-info'):
+    # This is slow
+    # suggestion - load from:
+    # MV_OUTPUT_FOLDER = '/home/t-yuche/admission-control/train/mv_log'
+    #mv_file = os.path.join(MV_OUTPUT_FOLDER, video_name + '.pickle')
+    #with open(mv_file, 'r') as fh:
+    #mv_features = pickle.load(fh)
+
+    # and use getMetadata
+    with open(os.path.join(folder, video_name + '_mv_norm.pickle')) as fh:
         mvdata = pickle.load(fh)
     
     with open(os.path.join(folder, video_name + '_enc.pickle')) as fh:

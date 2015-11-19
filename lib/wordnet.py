@@ -1,9 +1,13 @@
 import json
 
 
+def includerelation():
+    includerelation = {'musical instrument': 'guitar'}
+    return includerelation
+
 def convert_to_equal_word():
 
-    convert_dict = {'domestic cat': 'cat', 'people': 'person', 'man': 'person', 'men': 'person', 'woman': 'person', 'women': 'person', 'girl': 'person', 'boy': 'person'}
+    convert_dict = {'domestic cat': 'cat', 'people': 'person', 'man': 'person', 'men': 'person', 'woman': 'person', 'women': 'person', 'girl': 'person', 'boy': 'person', 'lady': 'person', 'kid': 'person', 'baby': 'person', 'skiing': 'ski'}
     
     return convert_dict 
 

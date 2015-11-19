@@ -2,15 +2,36 @@ from nltk.stem.wordnet import WordNetLemmatizer
 from nltk.tag import pos_tag
 from nlp import *
 from wordnet import *
+from vision import *
 import inflection 
 import math
 import json
 import nltk
 import csv
 import os
-
+import cv2
 
 BAD_WORDS = ['none', 'blurry', 'dark']
+
+
+def get_video_fps(video_name):
+    video_path = os.path.join('/mnt/videos', video_name)
+    if video_path.find('.mp4') < 0:
+        video_path += '.mp4'
+    cap = cv2.VideoCapture(video_path)    
+    fps  = cap.get(cv2.cv.CV_CAP_PROP_FPS) 
+    w  = int(cap.get(cv2.cv.CV_CAP_PROP_FRAME_WIDTH))
+    h  = int(cap.get(cv2.cv.CV_CAP_PROP_FRAME_HEIGHT))
+ 
+    return fps, w, h
+
+def get_video_frame_num(video_name):
+    return len(os.listdir(os.path.join('/mnt/frames', video_name)))
+
+def get_video_res(video_name):
+    mv_data, enc_data = getCompressedInfoFromLog(video_name)
+
+    return enc_data['metadata']['w'], enc_data['metadata']['h']
 
 def deprecation(message):
     from warnings import warn
@@ -81,7 +102,7 @@ def turker_isbadframe(gt_labels):
     return False
 
 def load_video_rcnn_bbx(rcnn_bbx_folder, video_name):
-    
+    # bbx is [x1, y1, x2, y2] 
 
     file_pref = os.path.join(rcnn_bbx_folder, video_name)    
     filepath = file_pref + '_rcnnbbx.json'

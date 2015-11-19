@@ -1,7 +1,7 @@
 import numpy as np
 
 
-def get_video_rel(gt_video_rank, score_thresh, method = 0):
+def get_video_rel(gt_video_rank, score_thresh, method = 2):
     """
     method 0: [1. 0.6309, 0.5, 0.4307, ...]
     method 1: reciprocal rank score
