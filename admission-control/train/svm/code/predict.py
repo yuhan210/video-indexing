@@ -108,46 +108,64 @@ def predict_video(video_name, svm_model):
         # print x
         x = scale_feature(x, range_value) 
 
-        print video_name, fid, x 
+        #print video_name, fid, x 
         # predict
-        p_label, dummy, dummy = svm_predict([1], [x], svm_model)
+        p_label, dummy, dummy = svm_predict([1], [x], svm_model, '-q')
         
         p_label = p_label[0]
-        print p_label
+        #print p_label
         if int(p_label) == 1:
             selected_fids += [fid]
             prev_fid = fid
 
     return selected_fids 
 
+def predict_videos(model_fname, model):
+    
+    #svm_train_0.4_8733_3_0_10.model
+    output_trace_foldername =  os.path.join(PRED_TRACELOG, 'trace_' +  model_fname[10:-6])
+    if not os.path.exists(output_trace_foldername):
+        os.makedirs(output_trace_foldername)
+    
+    videos = open('/mnt/video_list.txt').read().split()
+    for video_name in videos: 
+        pred_trace = predict_video(video_name, model)
+        print video_name
+        with open(os.path.join(output_trace_foldername, video_name + '.pickle'), 'wb') as fh:
+            pickle.dump(pred_trace, fh)
+
 if __name__ == "__main__":
 
-    if len(sys.argv) != 2:
-        print 'Usage:', sys.argv[0], 'model_path'
+    if len(sys.argv) != 3:
+        print 'Usage:', sys.argv[0], 'model_path pvid'
         exit()   
- 
-    model_name = sys.argv[1]
+    
 
-    model = svm_load_model(model_name)
+    global range_value 
+    range_value = load_range_file() 
+
+    model_name = sys.argv[1]
+    pvid = int(sys.argv[2])-1
+
+    model = svm_load_model(os.path.join('./models', model_name))
     if model_name[-1] == '/':
         model_name = model_name[0:-1]
     model_fname = model_name.split('/')[-1]
 
-    #svm_train_0.4_8733_3_0_10.model
-    output_trace_foldername=  os.path.join(PRED_TRACELOG, 'trace_' +  model_fname[10:-6])
+    output_trace_foldername =  os.path.join(PRED_TRACELOG, 'trace_' +  model_fname[10:-6])
     if not os.path.exists(output_trace_foldername):
         os.makedirs(output_trace_foldername)
- 
-    global range_value 
-    range_value = load_range_file() 
- 
-  
+   
     videos = open('/mnt/video_list.txt').read().split()
-    for video_name in videos: 
+    for vid, video_name in enumerate(videos):
+        print video_name 
+        if vid != pvid:
+            continue
+        output_trace_filepath = os.path.join(output_trace_foldername, video_name + 'pickle') 
+        if os.path.exists(output_trace_filepath):
+            print 'exists'
+            continue
         pred_trace = predict_video(video_name, model)
-        print pred_trace 
-        #TODO: store predicted trace 
-        with open(os.path.join(output_trace_foldername, video_name + '.pickle'), 'wb') as fh:
-            fh.dump(pred_trace, fh)
-        exit() 
-
+        with open(output_trace_filepath, 'wb') as fh:
+            pickle.dump(pred_trace, fh)
+        break
