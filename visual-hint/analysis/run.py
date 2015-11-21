@@ -1,3 +1,4 @@
+import os
 import csv
 import numpy as np
 import matplotlib
@@ -9,6 +10,7 @@ except:
 
 
 def load_turker_video_labels(file_name):
+
     csv_file = open(file_name)
     csv_reader = csv.DictReader(csv_file, delimiter="\t") 
    
@@ -82,13 +84,16 @@ def get_bin_idx(edges, value):
 if __name__ == "__main__":
 
 
+    LOG_PATH = '/home/t-yuche/visual-hint/analysis/log/'
     video_info = load_video_obj_info('/home/t-yuche/visual-hint/video-seg-info/single_obj.txt')
     
     selection_infos = []
     
-    selection_infos += [load_turker_video_labels('/home/t-yuche/visual-hint/analysis/log/video_label.results-1')]
-    selection_infos += [load_turker_video_labels('/home/t-yuche/visual-hint/analysis/log/video_label.results-2')]
-    selection_infos += [load_turker_video_labels('/home/t-yuche/visual-hint/analysis/log/video_label.results-3')]
+    for r in os.listdir(LOG_PATH):
+        r_path = os.path.join(LOG_PATH, r)
+        for f in os.listdir(r_path):
+            f_path = os.path.join(r_path, f)
+            selection_infos += [load_turker_video_labels(f_path)]
 
     selection_info = {}
     # merge selection_info
@@ -107,7 +112,8 @@ if __name__ == "__main__":
         video_name_b = key.split('.mp4_')[1] 
         sel = maj_vote(selection_info[key])
         voted_info += [{'selection': sel, 'va': video_name_a, 'vb': video_name_b}]
- 
+
+    print voted_info 
     dwell_time_list = []
     obj_size_list = []
     moving_dist_list = []
@@ -118,6 +124,8 @@ if __name__ == "__main__":
         va = s['va']
         vb = s['vb']
 
+        if va not in video_info.keys() or vb not in video_info.keys() or vb == 'dog_rmi_gaillard_yfUflij74P4' or va == 'dog_rmi_gaillard_yfUflij74P4' or vb == 'purdy_the_rabbit_playing_football_PqiTbB-BLOU' or va == 'purdy_the_rabbit_playing_football_PqiTbB-BLOU' or va == 'puriums_cracked_cell_chlorella__event_our_cat_loves_it_lxjF-iJboLc' or vb == 'puriums_cracked_cell_chlorella__event_our_cat_loves_it_lxjF-iJboLc':
+            continue
         
         t1 = video_info[va]['dwell_time'] - video_info[vb]['dwell_time']
         r1 = video_info[va]['obj_region'] - video_info[vb]['obj_region']
