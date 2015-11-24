@@ -41,7 +41,7 @@ class Model:
     def __init__(self, stream_id, model_config, create_ts):
         self.stream_id = stream_id  # -1: non-sp
         self.creat_ts = create_ts
-        self.model_config = model_config 
+        self.config = model_config 
 
 class Job:
     def __init__(self, process_id, stream_id, frame_id, emit_ts, start_ts, end_ts, job_config):
@@ -145,7 +145,7 @@ class Machine:
 
             return False
 
-       elif scheme == 'sp-dy':
+        elif scheme == 'sp-dy':
 
             if self.does_job_model_fit(job):
 
@@ -188,10 +188,15 @@ class Machine:
 
         return finished_jobs
 
-    def rm_model(self, removed_model, model_id):
+    def rm_model_given_job(self, removed_job):
 
-        self.mem_util -= removed_model['mem_req']
-        del self.models[idx]
+        for model_id, model in enumerate(self.model):
+            if model.stream_id == job.stream_id and model.create_ts == job.start_ts: 
+                self.mem_util -= model.config['mem_req']
+                del self.models[model_id]
+                return True
+
+        return False
 
     def rm_job_n_model(self, cur_ts):
 
@@ -209,10 +214,10 @@ class Machine:
                 self.cpu_util -= job.config['job_util']
                 
                 # find the model that belongs to the job and rm it 
-                for model_id, model in enumerate(self.model):
-                    if model.stream_id = job.stream_id and model.create_ts == job.start_ts:
-                        rm_model(model, model_id) 
- 
+                status = self.rm_model_given_job(job)
+                if not status:
+                    logger.error('Error in removing the Model for Job(%s)', job) 
+
                 finished_pids += [idx]
 
         for idx in reversed(finished_pids):
@@ -223,8 +228,9 @@ class Machine:
  
 class Global:
 
-    def __init__(self, scheme):   
+    def __init__(self, scheme, stream_names):   
         self.scheme = scheme
+        self.stream_names = stream_names
         ### 
         param = model_pb2.ApplicationModel()
         with open(SP_MODEL_CONFIG) as f:
@@ -234,8 +240,9 @@ class Global:
         with open(START_FID_PATH) as fh:
             self.sim_start_fids = pickle.load(fh)
 
-        with open(SP_TRACE_LOG) as fh:
-            self.sp_trace = pickle.load(fh)
+        self.sp_trace = {}
+        for video_name in stream_names:
+            self.sp_trace[video_name] = pickle.load(open(os.path.join(SP_TRACE_LOG, video_name + '_0.5.pickle')))
 
         if SP_CDF_N == 10 and SP_CDF_P == 0.8:
             N_PRE_MACHINES = N_STREAMS * 0.024 
@@ -255,7 +262,27 @@ class Global:
             s_load_lat = self.model_config.models[0].s_loading_latency
             
      
-            job_config = {'compute_flop': compute_flop, 'mem_interm_req': INTERM_MEM_REQ, 'mem_req': mem_req, 'load_lat': load_lat, 'gpu_comp_lat': gpu_comp_lat, 'cpu_comp_lat': cpu_comp_lat, 's_comp_lat': s_comp_lat, 's_load_lat': s_load_lat} 
+            job_config = {'compute_flop': compute_flop, 'mem_interm_req': INTERM_MEM_REQ, 'mem_req': mem_req, 'load_lat': load_lat, 'gpu_comp_lat': gpu_comp_lat, 'cpu_comp_lat': cpu_comp_lat, 's_comp_lat': s_comp_lat, 's_load_lat': s_load_lat}
+
+        elif self.scheme == 'sp-dy':
+
+            model_type = 0
+            for tup in self.sp_trace[stream_name]:
+                if cur_fid > tup[0]:
+                    model_type = 7
+                    break
+            
+            compute_flop = float(self.model_config.models[model_type].compute)
+            mem_req = float(self.model_config.models[model_type].memory)
+            load_lat = self.model_config.models[model_type].loading_latency
+            gpu_comp_lat = self.model_config.models[model_type].compute_latency
+            cpu_comp_lat = self.model_config.models[model_type].cpu_compute_latency
+            s_comp_lat = self.model_config.models[model_type].s_compute_latency
+            s_load_lat = self.model_config.models[model_type].s_loading_latency
+            
+     
+            job_config = {'compute_flop': compute_flop, 'mem_interm_req': INTERM_MEM_REQ, 'mem_req': mem_req, 'load_lat': load_lat, 'gpu_comp_lat': gpu_comp_lat, 'cpu_comp_lat': cpu_comp_lat, 's_comp_lat': s_comp_lat, 's_load_lat': s_load_lat}
+
 
             return job_config
 
@@ -348,7 +375,7 @@ class Cloud:
 
     def does_job_model_fit(self, machine_status, job):
 
-        if machine_status['mem_util_byte'] + job.config['mem_interm_req'] + job.config['mem_req'] > machine_status['mem_lim']
+        if machine_status['mem_util_byte'] + job.config['mem_interm_req'] + job.config['mem_req'] > machine_status['mem_lim']:
             return False
  
         if machine_status['cpu_util_flop'] + job.config['job_util']  > machine_status['cpu_lim']:
@@ -472,7 +499,7 @@ class Cloud:
             for ite in xrange(n_jobs):
  
                 if SCHEDULE_METRIC == 'fairness': 
-                    job_queue = SLOTBASED_FAIRNESS(job_queue)
+                    job_queue = self.SLOTBASED_FAIRNESS(job_queue)
                 
                 job = job_queue[0] 
                 machine_statuses = self.get_machine_statues()
@@ -500,7 +527,7 @@ class Cloud:
     def update(self, cur_ts):
 
 
-        if self.scheme == 'nsp' or self.scheme == 'sp-pre':
+        if self.scheme == 'nsp':
             finished_jobs = []
             for m in self.machines:
                 fjs = self.machines[m].rm_job(cur_ts)
@@ -542,59 +569,6 @@ class Cloud:
             return finished_jobs
 
  
-class Global:
-
-    def __init__(self, scheme):   
-        self.scheme = scheme
-        ### 
-        model_config = ConfigParser.ConfigParser()
-        model_config.read('sim.conf')
-        models_as_rsc_file = model_config.get('specialize', 'resource_file')
- 
-        param = model_pb2.ApplicationModel()
-        with open(models_as_rsc_file) as f:
-            google.protobuf.text_format.Merge(f.read(), param)
-        
-        self.model_config = param
-
-        with open(DICTIONARY_PATH) as fh:
-            self.all_objs = pickle.load(fh)
-
-        with open(START_FID_PATH) as fh:
-            self.sim_start_fids = pickle.load(fh)
-        ###
-
-    def get_job_config(self, stream_name, cur_fid):
-
-        if self.scheme == 'nsp':
-            compute_flop = float(self.model_config.models[0].compute)
-            mem_req = float(self.model_config.models[0].memory)
-            load_lat = self.model_config.models[0].loading_latency
-            gpu_comp_lat = self.model_config.models[0].compute_latency
-            cpu_comp_lat = self.model_config.models[0].cpu_compute_latency
-            s_comp_lat = self.model_config.models[0].s_compute_latency
-            s_load_lat = self.model_config.models[0].s_loading_latency
-            
-     
-            job_config = {'compute_flop': compute_flop, 'mem_interm_req': INTERM_MEM_REQ, 'mem_req': mem_req, 'load_lat': load_lat, 'gpu_comp_lat': gpu_comp_lat, 'cpu_comp_lat': cpu_comp_lat, 's_comp_lat': s_comp_lat, 's_load_lat': s_load_lat} 
-
-            return job_config
-
-    def get_model_config(self):
-
-        if self.scheme == 'nsp':
-            compute_flop = float(self.model_config.models[0].compute)
-            mem_req = float(self.model_config.models[0].memory)
-            load_lat = self.model_config.models[0].loading_latency
-            gpu_comp_lat = self.model_config.models[0].compute_latency
-            cpu_comp_lat = self.model_config.models[0].cpu_compute_latency
-            s_comp_lat = self.model_config.models[0].s_compute_latency
-            s_load_lat = self.model_config.models[0].s_loading_latency
-     
-            job_config = {'compute_flop': compute_flop, 'mem_req': mem_req, 'load_lat': load_lat, 'gpu_comp_lat': gpu_comp_lat, 'cpu_comp_lat': cpu_comp_lat, 's_comp_lat': s_comp_lat, 's_load_lat': s_load_lat} 
-            return job_config
-
-
 def run_scheme(scheme):
 
     #####
@@ -725,7 +699,8 @@ if __name__ == "__main__":
 
     scheme = 'nsp'
     global GLOBAL
-    GLOBAL = Global(scheme)
+    videos = open(VIDEO_LIST).read().split() 
+    GLOBAL = Global(scheme, videos)
     run_scheme(scheme) 
                   
            
