@@ -40,7 +40,7 @@ INTERM_MEM_REQ = float(config.get('specialize', 'interm_mem_req'))
 class Model:
     def __init__(self, stream_id, model_config, create_ts):
         self.stream_id = stream_id  # -1: non-sp
-        self.creat_ts = create_ts
+        self.create_ts = create_ts
         self.config = model_config 
 
 class Job:
@@ -190,8 +190,8 @@ class Machine:
 
     def rm_model_given_job(self, removed_job):
 
-        for model_id, model in enumerate(self.model):
-            if model.stream_id == job.stream_id and model.create_ts == job.start_ts: 
+        for model_id, model in enumerate(self.models):
+            if model.stream_id == removed_job.stream_id and model.create_ts == removed_job.start_ts: 
                 self.mem_util -= model.config['mem_req']
                 del self.models[model_id]
                 return True
@@ -245,9 +245,9 @@ class Global:
             self.sp_trace[video_name] = pickle.load(open(os.path.join(SP_TRACE_LOG, video_name + '_0.5.pickle')))
 
         if SP_CDF_N == 10 and SP_CDF_P == 0.8:
-            N_PRE_MACHINES = N_STREAMS * 0.024 
+            self.N_PRE_MACHINES = N_STREAMS * 0.024 
         elif SP_CDF_N == 10 and SP_CDF_P == 0.9:
-            N_PRE_MACHINES = N_STREAMS * 0.068 
+            self.N_PRE_MACHINES = N_STREAMS * 0.068 
         ### 
 
     def get_job_config(self, stream_name, cur_fid):
@@ -284,7 +284,7 @@ class Global:
             job_config = {'compute_flop': compute_flop, 'mem_interm_req': INTERM_MEM_REQ, 'mem_req': mem_req, 'load_lat': load_lat, 'gpu_comp_lat': gpu_comp_lat, 'cpu_comp_lat': cpu_comp_lat, 's_comp_lat': s_comp_lat, 's_load_lat': s_load_lat}
 
 
-            return job_config
+        return job_config
 
     def get_general_model_config(self):
 
@@ -296,7 +296,7 @@ class Global:
         s_comp_lat = self.model_config.models[0].s_compute_latency
         s_load_lat = self.model_config.models[0].s_loading_latency
  
-        model_config = {'compute_flop': compute_flop, 'mem_req': mem_req, 'load_lat': load_lat, 'gpu_comp_lat': gpu_comp_lat, 'cpu_comp_lat': cpu_comp_lat, 's_comp_lat': s_comp_lat, 's_load_lat': s_load_lat} 
+        model_config = {'compute_flop': compute_flop,'mem_interm_req':INTERM_MEM_REQ, 'mem_req': mem_req, 'load_lat': load_lat, 'gpu_comp_lat': gpu_comp_lat, 'cpu_comp_lat': cpu_comp_lat, 's_comp_lat': s_comp_lat, 's_load_lat': s_load_lat} 
         return model_config
 
     def get_sp_model_config(self, model_type = 7):
@@ -309,7 +309,7 @@ class Global:
         s_comp_lat = self.model_config.models[model_type].s_compute_latency
         s_load_lat = self.model_config.models[model_type].s_loading_latency
  
-        model_config = {'compute_flop': compute_flop, 'mem_req': mem_req, 'load_lat': load_lat, 'gpu_comp_lat': gpu_comp_lat, 'cpu_comp_lat': cpu_comp_lat, 's_comp_lat': s_comp_lat, 's_load_lat': s_load_lat} 
+        model_config = {'compute_flop': compute_flop, 'mem_interm_req': INTERM_MEM_REQ, 'mem_req': mem_req, 'load_lat': load_lat, 'gpu_comp_lat': gpu_comp_lat, 'cpu_comp_lat': cpu_comp_lat, 's_comp_lat': s_comp_lat, 's_load_lat': s_load_lat} 
             
 class Cloud:
 
@@ -340,7 +340,7 @@ class Cloud:
             # preload general dnn
             model_config = GLOBAL.get_general_model_config()
             for i, mid in enumerate(self.machines):
-                if i == N_PRE_MACHINES:
+                if i == GLOBAL.N_PRE_MACHINES:
                     break
                 machine = self.machines[mid]
                 status = machine.preload_model(-1, model_config)
@@ -479,8 +479,8 @@ class Cloud:
                         else: # job start running
                             self.fairness_count[job.stream_id] += 1
                             ###
-                            if len(start_jobs) == 0:
-                                logger.info('%d -- Schedule', cur_ts)                            
+                            #if len(start_jobs) == 0:
+                            #    logger.info('%d -- Schedule', cur_ts)                            
                             ###
 
                             logger.info('%d -- Schedule Job(%s) on Mach(%s)', cur_ts, job, self.machines[mid])
@@ -513,8 +513,8 @@ class Cloud:
                         else: # job start running
                             self.fairness_count[job.stream_id] += 1
                             ###
-                            if len(start_jobs) == 0:
-                                logger.info('%d -- Schedule', cur_ts)                            
+                            #if len(start_jobs) == 0:
+                            #    logger.info('%d -- Schedule', cur_ts)                            
                             ###
 
                             logger.info('%d -- Schedule Job(%s) on Mach(%s)', cur_ts, job, self.machines[mid])
@@ -697,7 +697,7 @@ def plot_cloud_util_log(cloud_util_log):
 
 if __name__ == "__main__":
 
-    scheme = 'nsp'
+    scheme = 'sp-dy'
     global GLOBAL
     videos = open(VIDEO_LIST).read().split() 
     GLOBAL = Global(scheme, videos)
