@@ -5,12 +5,13 @@ import ConfigParser
 import logging
 import pickle
 import random
+import sys
 import os
 import matplotlib
 import matplotlib.pyplot as plt
 from utils import *
 
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 config = ConfigParser.ConfigParser()
@@ -427,7 +428,10 @@ class Cloud:
     def SRTF(self, job_queue, cur_ts):
 
         if self.scheme == 'nsp':
+            # all jobs have the same remaining time. Use FCFS
+            job_queue = sorted(job_queue, key = lambda x: x.emit_ts)
 
+            '''
             remaining_time = [(cur_ts + j.config['cpu_comp_lat']) - j.emit_ts for j in job_queue]  
             remaining_time_pair = sorted((rt,i) for i, rt in enumerate(remaining_time))  # small to big
             remaining_rank_index = [x[1] for x in remaining_time_pair]
@@ -436,6 +440,7 @@ class Cloud:
             for i, ridx in enumerate(remaining_rank_index):
                 job_queue[i] = tmp_job_queue[ridx]
 
+            '''
             return job_queue
             
 
@@ -452,14 +457,15 @@ class Cloud:
 
     def schedule(self, job_queue, cur_ts):
 
+        #print 'schedule -- ', self.scheme, SCHEDULE_METRIC
         if len(job_queue) == 0:
             return job_queue
 
         if self.scheme == 'nsp':
-
+            
             n_jobs = len(job_queue)
 
-            if SCHEDULE_METRIC == 'completion': 
+            if SCHEDULE_METRIC == 'completion':
                 job_queue = self.SRTF(job_queue, cur_ts)
 
             for ite in xrange(n_jobs):
@@ -593,7 +599,8 @@ def run_scheme(scheme):
         if len(streams) > N_STREAMS:
             break
         streams += videos
-
+    
+    random.seed(0)
     streams = random.sample(streams, N_STREAMS)
     #####
 
@@ -697,7 +704,7 @@ def plot_cloud_util_log(cloud_util_log):
 
 if __name__ == "__main__":
 
-    scheme = 'sp-dy'
+    scheme = 'nsp'
     global GLOBAL
     videos = open(VIDEO_LIST).read().split() 
     GLOBAL = Global(scheme, videos)
