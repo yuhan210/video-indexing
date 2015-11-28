@@ -13,6 +13,7 @@ import optparse
 import tornado.wsgi
 import tornado.httpserver
 import numpy as np
+from utils import *
 
 VIDEOS = open('/mnt/video_list.txt').read().split()
 
@@ -237,6 +238,9 @@ def start_tornado(app, port=5000):
     tornado.ioloop.IOLoop.instance().start()
 
 
+def get_stream_seg(stream_name):
+    with open('/home/t-yuche/ranking/gen_rank_data/start_fid_set.pickle') as fh:
+        start_fid_set = pickle.load(fh) 
 
 def start_from_terminal(app):
 
