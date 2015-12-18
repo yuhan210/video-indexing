@@ -7,6 +7,7 @@ import time
 import numpy as np
 import scipy.stats as stats
 import operator
+from vision import *
 import pickle
 import matplotlib
 import matplotlib.pyplot as plt
@@ -57,18 +58,18 @@ def combine_all_modeldicts(_vgg_data, _msr_data, _rcnn_data, _fei_data, frame_pa
         rcnn_data = _rcnn_data[frame_path]
         vgg_data = _vgg_data[frame_path]
         msr_data = _msr_data[frame_path]
-        fei_data = _fei_data[frame_path]
+        #fei_data = _fei_data[frame_path]
    
 
         # combine words
-        
+        '''        
         rcnn_ws = []
         if len(rcnn_data) > 0:
             for rcnn_idx, word in enumerate(rcnn_data['pred']['text']):
                 ## the confidence is higher than 10^(-3) and is not background
                 if rcnn_data['pred']['conf'][rcnn_idx] > 0.0005 and word not in stop_words:
                     rcnn_ws += [word]
-
+        '''
         vgg_ws = []
         if len(vgg_data) > 0:
             for vgg_idx, w in enumerate(vgg_data['pred']['text']):
@@ -102,23 +103,25 @@ def combine_all_modeldicts(_vgg_data, _msr_data, _rcnn_data, _fei_data, frame_pa
                     msr_ws += [w]
 
         words = {}
+        '''
         for w in rcnn_ws:
             if w not in words:
                 words[w] = 1
             else:
                 words[w] += 1
+        '''
         for w in vgg_ws:
             if w not in words:
                 words[w] = 1
             else:
                 words[w] += 1
-        
+        ''' 
         for w in fei_ws:
             if w not in words:
                 words[w] = 1
             else:
                 words[w] += 1
-    
+        '''
         for w_idx, w in enumerate(msr_ws):
             if w not in words:
                 words[w] = 1
@@ -154,15 +157,18 @@ if __name__ == "__main__":
         print pvid, video_name      
     
         outputpath = '/home/t-yuche/admission-control/eval/optimal-log/optimal-tf/' + video_name + '_' + str(UNIMPORTANTWORD_THRESH) + '.pickle'
+        '''
         if os.path.exists(outputpath):
             print 'exists'
             continue
-        rcnn_dict, vgg_dict, fei_caption_dict, msr_cap_dict, dummy = load_all_modules_dict(video_name)
+        '''
+        rcnn_dict, vgg_dict, fei_caption_dict, msr_cap_dict, dummy = load_all_modules_dict_local(video_name)
         video_len_f = len(vgg_dict)
         # sliding window   
         video_start_fid = 0
         video_end_fid = 0
         optimal_tf_dict = {}
+        cvdata = getCVInfoFromLog(video_name)
 
         while True:
 
@@ -170,12 +176,23 @@ if __name__ == "__main__":
                 break  
             video_end_fid = min(video_start_fid + SERVER_STORAGE_FRAMES, video_len_f)
             #print 'start:', video_start_fid, ' end:', video_end_fid
- 
+            
+   
             ''' Optimal '''
-            optimal_frames = [os.path.join('/mnt/frames', video_name, str(x) + '.jpg') for x in range(video_start_fid, video_end_fid)] 
-            optimal_tf_list = combine_all_modeldicts(vgg_dict, msr_cap_dict, rcnn_dict, fei_caption_dict, optimal_frames)
-            optimal_tf = get_combined_tfs(optimal_tf_list)
-            optimal_tf = remove_unimportantwords(optimal_tf,  UNIMPORTANTWORD_THRESH)
+            optimal_frames = [os.path.join('/mnt/frames', video_name, str(x) + '.jpg') for x in range(video_start_fid, video_end_fid)]
+            # get illumination
+                
+            illus = []
+            for cv_fid in xrange(video_start_fid, video_end_fid):
+                framename = str(cv_fid) + '.jpg'
+                cv = cvdata[framename]
+                illus += [cv['illu'][0]]
+            if np.mean(illus) < 10:
+                optimal_tf = {}
+            else: 
+                optimal_tf_list = combine_all_modeldicts(vgg_dict, msr_cap_dict, rcnn_dict, fei_caption_dict, optimal_frames)
+                optimal_tf = get_combined_tfs(optimal_tf_list)
+                optimal_tf = remove_unimportantwords(optimal_tf,  UNIMPORTANTWORD_THRESH)
             key = str(video_start_fid) + '-' + str(video_end_fid)
             optimal_tf_dict[key] = optimal_tf
 
