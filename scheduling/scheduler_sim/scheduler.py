@@ -56,7 +56,7 @@ class Job:
         self.config['job_util'] = self.get_job_util()
 
     def __str__(self):
-        return 'process_id:' + str(self.process_id) + ' stream:' + str(self.stream_id) + ' frame_id:' + str(self.frame_id) + ' emit_ts:' + str(self.emit_ts) +  ' start_ts:' + str(self.start_ts) + ' end_ts:' + str(self.end_ts)
+        return 'process_id:' + str(self.process_id) + ' stream:' + str(self.stream_id) + ' frame_id:' + str(self.frame_id) + ' emit_ts:' + str(self.emit_ts) +  ' start_ts:' + str(self.start_ts) + ' end_ts:' + str(self.end_ts) + ' model_type:' + str(self.config['model_type'])
 
     def get_job_util(self):
         return self.config['compute_flop']/((self.config['cpu_comp_lat']/1000.) * 1.0)
@@ -102,7 +102,7 @@ class Machine:
 
     def get_status(self):
 
-        m_status = {'mem_util_byte': self.mem_util, 'mem_util_prec': self.mem_util/(self.MEM_LIM * 1.0), 'cpu_util_flop': self.cpu_util, 'cpu_util_prec': self.cpu_util/(self.CPU_LIM * 1.0), 'mem_lim': self.MEM_LIM, 'cpu_lim': self.CPU_LIM}
+        m_status = {'mem_util_byte': self.mem_util, 'mem_util_prec': self.mem_util/(self.MEM_LIM * 1.0), 'cpu_util_flop': self.cpu_util, 'cpu_util_prec': self.cpu_util/(self.CPU_LIM * 1.0), 'mem_lim': self.MEM_LIM, 'cpu_lim': self.CPU_LIM, 'models': self.models}
 
         return m_status
 
@@ -119,16 +119,35 @@ class Machine:
         return True 
 
     def does_job_model_fit(self, job):
+    
+        # check if the job is specializable
+        if job.config['model_type'] == 0: # non specialized
 
-        # check if adding this job exceeds mem capacity
-        if self.mem_util + job.config['mem_interm_req'] + job.config['mem_req'] > self.MEM_LIM :
+            for model in self.models: 
+                if model.config['model_type'] == 0: 
+                    # check if adding this job exceeds mem capacity
+                    if self.mem_util + job.config['mem_interm_req'] > self.MEM_LIM :
+                        return False
+
+                    # check if adding this job exceeds cpu util
+                    if self.cpu_util + job.config['job_util'] > self.CPU_LIM:
+                        return False
+
+                    return True
+
             return False
+ 
+        else:
 
-        # check if adding this job exceeds cpu util
-        if self.cpu_util + job.config['job_util'] > self.CPU_LIM:
-            return False
+            # check if adding this job exceeds mem capacity
+            if self.mem_util + job.config['mem_interm_req'] + job.config['mem_req'] > self.MEM_LIM :
+                return False
 
-        return True 
+            # check if adding this job exceeds cpu util
+            if self.cpu_util + job.config['job_util'] > self.CPU_LIM:
+                return False
+
+            return True 
         
 
     def run(self, scheme, job, cur_ts):
@@ -232,6 +251,7 @@ class Global:
     def __init__(self, scheme, stream_names):   
         self.scheme = scheme
         self.stream_names = stream_names
+
         ### 
         param = model_pb2.ApplicationModel()
         with open(SP_MODEL_CONFIG) as f:
@@ -263,7 +283,7 @@ class Global:
             s_load_lat = self.model_config.models[0].s_loading_latency
             
      
-            job_config = {'compute_flop': compute_flop, 'mem_interm_req': INTERM_MEM_REQ, 'mem_req': mem_req, 'load_lat': load_lat, 'gpu_comp_lat': gpu_comp_lat, 'cpu_comp_lat': cpu_comp_lat, 's_comp_lat': s_comp_lat, 's_load_lat': s_load_lat}
+            job_config = {'compute_flop': compute_flop, 'mem_interm_req': INTERM_MEM_REQ, 'mem_req': mem_req, 'load_lat': load_lat, 'gpu_comp_lat': gpu_comp_lat, 'cpu_comp_lat': cpu_comp_lat, 's_comp_lat': s_comp_lat, 's_load_lat': s_load_lat, 'model_type': 0}
 
         elif self.scheme == 'sp-dy':
 
@@ -282,7 +302,7 @@ class Global:
             s_load_lat = self.model_config.models[model_type].s_loading_latency
             
      
-            job_config = {'compute_flop': compute_flop, 'mem_interm_req': INTERM_MEM_REQ, 'mem_req': mem_req, 'load_lat': load_lat, 'gpu_comp_lat': gpu_comp_lat, 'cpu_comp_lat': cpu_comp_lat, 's_comp_lat': s_comp_lat, 's_load_lat': s_load_lat}
+            job_config = {'compute_flop': compute_flop, 'mem_interm_req': INTERM_MEM_REQ, 'mem_req': mem_req, 'load_lat': load_lat, 'gpu_comp_lat': gpu_comp_lat, 'cpu_comp_lat': cpu_comp_lat, 's_comp_lat': s_comp_lat, 's_load_lat': s_load_lat, 'model_type': model_type}
 
 
         return job_config
@@ -297,7 +317,7 @@ class Global:
         s_comp_lat = self.model_config.models[0].s_compute_latency
         s_load_lat = self.model_config.models[0].s_loading_latency
  
-        model_config = {'compute_flop': compute_flop,'mem_interm_req':INTERM_MEM_REQ, 'mem_req': mem_req, 'load_lat': load_lat, 'gpu_comp_lat': gpu_comp_lat, 'cpu_comp_lat': cpu_comp_lat, 's_comp_lat': s_comp_lat, 's_load_lat': s_load_lat} 
+        model_config = {'compute_flop': compute_flop,'mem_interm_req':INTERM_MEM_REQ, 'mem_req': mem_req, 'load_lat': load_lat, 'gpu_comp_lat': gpu_comp_lat, 'cpu_comp_lat': cpu_comp_lat, 's_comp_lat': s_comp_lat, 's_load_lat': s_load_lat, 'model_type': 0} 
         return model_config
 
     def get_sp_model_config(self, model_type = 7):
@@ -310,7 +330,7 @@ class Global:
         s_comp_lat = self.model_config.models[model_type].s_compute_latency
         s_load_lat = self.model_config.models[model_type].s_loading_latency
  
-        model_config = {'compute_flop': compute_flop, 'mem_interm_req': INTERM_MEM_REQ, 'mem_req': mem_req, 'load_lat': load_lat, 'gpu_comp_lat': gpu_comp_lat, 'cpu_comp_lat': cpu_comp_lat, 's_comp_lat': s_comp_lat, 's_load_lat': s_load_lat} 
+        model_config = {'compute_flop': compute_flop, 'mem_interm_req': INTERM_MEM_REQ, 'mem_req': mem_req, 'load_lat': load_lat, 'gpu_comp_lat': gpu_comp_lat, 'cpu_comp_lat': cpu_comp_lat, 's_comp_lat': s_comp_lat, 's_load_lat': s_load_lat, 'model_type': model_type} 
             
 class Cloud:
 
@@ -376,14 +396,30 @@ class Cloud:
 
     def does_job_model_fit(self, machine_status, job):
 
-        if machine_status['mem_util_byte'] + job.config['mem_interm_req'] + job.config['mem_req'] > machine_status['mem_lim']:
-            return False
- 
-        if machine_status['cpu_util_flop'] + job.config['job_util']  > machine_status['cpu_lim']:
-            #logger.debug('Exceed cpu util -- CPU util: %f, job util: %f', machine_status['cpu_util_flop'],  job.config['job_util'])
-            return False
+        if job.config['model_type'] == 0:
 
-        return True
+            for model in machine_status['models']:
+                if model.config['model_type'] == 0:
+
+                    if machine_status['mem_util_byte'] + job.config['mem_interm_req'] > machine_status['mem_lim']:
+                        return False
+ 
+                    if machine_status['cpu_util_flop'] + job.config['job_util']  > machine_status['cpu_lim']:
+                        return False
+               
+                    return True
+            return False 
+
+        else:
+        
+            if machine_status['mem_util_byte'] + job.config['mem_interm_req'] + job.config['mem_req'] > machine_status['mem_lim']:
+                return False
+ 
+            if machine_status['cpu_util_flop'] + job.config['job_util']  > machine_status['cpu_lim']:
+                #logger.debug('Exceed cpu util -- CPU util: %f, job util: %f', machine_status['cpu_util_flop'],  job.config['job_util'])
+                return False
+
+            return True
 
     def does_job_fit(self, machine_status, job):
        
@@ -398,7 +434,7 @@ class Cloud:
 
         return True
 
-    def SLOTBASED_FAIRNESS(self, job_queue):
+    def SLOTBASED_FAIRNESS(self, job_queue, cur_ts):
 
         fair_share = sum(self.fairness_count)/(len(self.fairness_count) * 1.0)
         dist_from_fair_share = [(fair_share - x/(len(self.fairness_count) * 1.0)) for x in self.fairness_count] # bigger the poorer 
@@ -422,7 +458,12 @@ class Cloud:
 
         for job in tmp_job_queue:
             ordered_job_queue += [job]
- 
+        ''' 
+        job_str = ''
+        for job in ordered_job_queue:
+            job_str += str(job) + ' remaining time:' + str(job.config['load_lat'] + job.config['cpu_comp_lat']) + ' completion time:' + str(cur_ts + job.config['load_lat'] + job.config['cpu_comp_lat'] - job.emit_ts)+ '\n'
+        logger.info('%d -- \n job queue: %s', cur_ts, job_str)
+        '''
         return ordered_job_queue
 
     def SRTF(self, job_queue, cur_ts):
@@ -430,6 +471,11 @@ class Cloud:
         if self.scheme == 'nsp':
             # all jobs have the same remaining time. Use FCFS
             job_queue = sorted(job_queue, key = lambda x: x.emit_ts)
+            
+            #job_str = ''
+            #for job in job_queue:
+            #    job_str += str(job) + '\n'
+            #logger.info('%d -- job queue: %s', cur_ts, job_str)
 
             '''
             remaining_time = [(cur_ts + j.config['cpu_comp_lat']) - j.emit_ts for j in job_queue]  
@@ -446,12 +492,18 @@ class Cloud:
 
         elif self.scheme == 'sp-dy':
             remaining_time = [(cur_ts + j.config['load_lat'] + j.config['cpu_comp_lat']) - j.emit_ts for j in job_queue]  
+            #remaining_time = [j.config['load_lat'] + j.config['cpu_comp_lat'] for j in job_queue]  
             remaining_time_pair = sorted((rt,i) for i, rt in enumerate(remaining_time))  # small to big
             remaining_rank_index = [x[1] for x in remaining_time_pair]
             
             tmp_job_queue = list(job_queue)
             for i, ridx in enumerate(remaining_rank_index):
                 job_queue[i] = tmp_job_queue[ridx]
+
+            #job_str = ''
+            #for job in job_queue:
+            #    job_str += str(job) + ' remaining time:' + str(job.config['load_lat'] + job.config['cpu_comp_lat']) + ' completion time:' + str(cur_ts + job.config['load_lat'] + job.config['cpu_comp_lat'] - job.emit_ts)+ '\n'
+            #logger.info('%d -- \n job queue: %s', cur_ts, job_str)
 
             return job_queue
 
@@ -471,7 +523,7 @@ class Cloud:
             for ite in xrange(n_jobs):
  
                 if SCHEDULE_METRIC == 'fairness': 
-                    job_queue = self.SLOTBASED_FAIRNESS(job_queue)
+                    job_queue = self.SLOTBASED_FAIRNESS(job_queue, cur_ts)
                 
                 job = job_queue[0] 
                 machine_statuses = self.get_machine_statues()
@@ -502,10 +554,15 @@ class Cloud:
             if SCHEDULE_METRIC == 'completion':
                 job_queue = self.SRTF(job_queue, cur_ts)
             
+            job_str = ''
+            for job in job_queue:
+                job_str += str(job) + '\n'
+            logger.info('%d -- job queue: %s', cur_ts, job_str)
+
             for ite in xrange(n_jobs):
  
                 if SCHEDULE_METRIC == 'fairness': 
-                    job_queue = self.SLOTBASED_FAIRNESS(job_queue)
+                    job_queue = self.SLOTBASED_FAIRNESS(job_queue, cur_ts)
                 
                 job = job_queue[0] 
                 machine_statuses = self.get_machine_statues()
@@ -528,6 +585,58 @@ class Cloud:
                             break
 
             return job_queue
+        
+        elif self.scheme == 'sp-pre':
+
+            n_jobs = len(job_queue)
+
+            if SCHEDULE_METRIC == 'completion':
+                job_queue = self.SRTF(job_queue, cur_ts)
+            
+            job_str = ''
+            for job in job_queue:
+                job_str += str(job) + '\n'
+            logger.info('%d -- job queue: %s', cur_ts, job_str)
+
+            for ite in xrange(n_jobs):
+ 
+                if SCHEDULE_METRIC == 'fairness': 
+                    job_queue = self.SLOTBASED_FAIRNESS(job_queue, cur_ts)
+                
+                job = job_queue[0] 
+                machine_statuses = self.get_machine_statues()
+
+                for mid in machine_statuses:
+                    if self.does_job_model_fit(machine_statuses[mid], job):
+                        status = self.machines[mid].run(self.scheme, job, cur_ts)
+                        if not status:
+                            logger.error('Error placing Job(%s) on Mach(%s)', job, self.machines[mid] )
+                            exit(-1)
+                        else: # job start running
+                            self.fairness_count[job.stream_id] += 1
+                            ###
+                            #if len(start_jobs) == 0:
+                            #    logger.info('%d -- Schedule', cur_ts)                            
+                            ###
+
+                            logger.info('%d -- Schedule Job(%s) on Mach(%s)', cur_ts, job, self.machines[mid])
+                            del job_queue[0] 
+                            break
+
+            return job_queue
+                
+
+    def update(self, cur_ts):
+
+
+        if self.scheme == 'nsp':
+            finished_jobs = []
+            for m in self.machines:
+                fjs = self.machines[m].rm_job(cur_ts)
+                
+                ### For debugging ###
+                if len(finished_jobs) == 0 and len(fjs) > 0:
+                    logger.info('%d -- Update', cur_ts)
                 
 
     def update(self, cur_ts):
@@ -704,7 +813,7 @@ def plot_cloud_util_log(cloud_util_log):
 
 if __name__ == "__main__":
 
-    scheme = 'nsp'
+    scheme = 'sp-dy'
     global GLOBAL
     videos = open(VIDEO_LIST).read().split() 
     GLOBAL = Global(scheme, videos)

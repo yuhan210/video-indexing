@@ -6,7 +6,7 @@ if __name__ == "__main__":
 
     N_SEED = 1000
     N_STREAMS = 1000000
-    GREEDY_INPUT_FOLDER = '/home/t-yuche/admission-control/window-greedy-log'
+    GREEDY_INPUT_FOLDER = '/home/t-yuche/admission-control/window-greedy-log-0.5'
     THRESH = 0.8
 
     videos = open('/mnt/video_list.txt').read().split()
