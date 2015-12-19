@@ -4,6 +4,7 @@ import itertools
 import pickle
 
 def load_turker_video_labels(file_name):
+
     csv_file = open(file_name)
     csv_reader = csv.DictReader(csv_file, delimiter="\t") 
    
@@ -13,11 +14,14 @@ def load_turker_video_labels(file_name):
         video_name_b = row['Answer.video_name_b']
         query_str = row['Answer.query_str']
         selection = row['Answer.selected_value'] 
+        rand_idx = row['Answer.rand_idx'] 
         if len(selection) == 0:
             continue
 
         key = video_name_a + '_' + video_name_b
-        selection_info += [{'va': video_name_a, 'vb':video_name_b, 'selection': selection, 'query_str':query_str}]
+        if selection == 'n':
+            continue
+        selection_info += [{'va': video_name_a, 'vb':video_name_b, 'selection': selection, 'query_str':query_str, 'rand_idx': rand_idx}]
 
 
     return selection_info
@@ -56,7 +60,7 @@ def get_rank_score(rank, selections):
                         violate_videos += [selection['va']]
                     if selection['vb'] not in violate_videos:
                         violate_videos += [selection['vb']]
-            else:
+            elif selection['selection'] == 'B':
                 if idx_a > idx_b:
                     satisfy_count += 1
                 else:
@@ -141,53 +145,27 @@ def rank(selections):
 
     return rank
 
-def swapping(rank, selections):
-    print 'SWAPPING'
-
-    score, bad_vs = get_rank_score(rank, selections)
-    indexes = [rank.index(x) for x in bad_vs]
-    min_idx = min(indexes) - 1
-    max_idx = max(indexes) + 1
-    #print max_idx - min_idx + 1
-     
-    for p in itertools.permutations(range(min_idx, max_idx + 1)):
-    
-        tmp_rank = list(rank)
-        for c, i in enumerate(xrange(min_idx, max_idx+1)):
-            tmp_rank[i] = rank[p[c]]
-        score, dummy = get_rank_score(tmp_rank, selections)
-        if score == 45:
-            return tmp_rank
-            break
-    
-
-def bruteforce(selections):
-    video_names = list(set([x['va'] for x in selections] + [x['vb'] for x in selections]))
-
-    n_videos = len(video_names)
-    for p in itertools.permutations(range(n_videos)):
-        rank = [video_names[x] for x in p]  
-        score, dummy = get_rank_score(rank, selections)
-        if score == 45:
-            break 
-        print p, score
 
 if __name__ == "__main__":
 
-    LABEL_FOLDER = '/home/t-yuche/ranking/process/process-labels/labels'
+    LABEL_FOLDER = './labels'
     for f in os.listdir(LABEL_FOLDER):
 
-        if f.find('single') >= 0:
-            ssid = f.split('.')[0].split('_')[-1]
+        if f.find('double') >= 0:
+            #ssid = f.split('.')[0].split('_')[-1]
             selection_info = load_turker_video_labels(os.path.join(LABEL_FOLDER, f))
       
             queries = list(set([x['query_str'] for x in selection_info]))
+            ssids = list(set([x['rand_idx'] for x in selection_info]))
 
             for query in queries:
-                selections = filter(lambda x: x['query_str'] == query, selection_info)
-                out_rank = rank(selections)
-                print query, get_rank_score(out_rank, selections)
+                for ssid in ssids:
+                    selections = filter(lambda x: x['query_str'] == query and x['rand_idx'] == ssid and (not x['selection'] == 'n'), selection_info)
+                    if len(selections) < 2:
+                        continue
+                    out_rank = rank(selections)
+                    print query, get_rank_score(out_rank, selections)
 
-                outputpath = os.path.join('./opt-rank', query + '_' + ssid + '.pickle')
-                with open(outputpath, 'wb')  as fh:
-                    pickle.dump(out_rank, fh)
+                    outputpath = os.path.join('./opt-rank', query + '_' + ssid + '.pickle')
+                    with open(outputpath, 'wb')  as fh:
+                        pickle.dump(out_rank, fh)
