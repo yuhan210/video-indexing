@@ -5,13 +5,16 @@ import os
 from utils import *
 
 SERVER_WINDOW_SIZE = 30 * 5
-for i in xrange(6, 20): 
+for i in xrange(0, 50): 
 
-    for query in open('../gen_rank_data/single_query').read().split():
+    for query in open('../gen_rank_data/double_query_yx').readlines():
+        query = query.strip()
+        file_path = '../gen_rank_data/label_videos/' + query + '_' + str(i) + '.pickle'
+        if not os.path.exists(file_path):
+            continue
         vs = pickle.load(open('../gen_rank_data/label_videos/' + query + '_' + str(i) + '.pickle'))
         #pairs = list(itertools.combinations(vs,2))
         for v in vs:
-            print v
         #for pair in pairs:
             video = v['video_name'] + '_' + str(v['start_fid']) + '_' + str(v['end_fid']) + '.mp4'
             #print video_a + '&video_name_b=' + video_b

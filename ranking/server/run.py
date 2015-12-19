@@ -6,6 +6,7 @@ import math
 import datetime
 import logging
 import flask
+from flask.ext.cors import CORS
 import operator
 import inflection
 import werkzeug
@@ -16,23 +17,88 @@ import numpy as np
 from utils import *
 
 VIDEOS = open('/mnt/video_list.txt').read().split()
+TOPK = 10
+SERVER_STORAGE_FRAMES = 5 * 30
 
 # Obtain the flask app object
 app = flask.Flask(__name__)
+CORS(app)
 
 #http://localhost:5000/search?query=test
 @app.route('/search', methods=['GET'])
 def search():
 
     query_str = flask.request.args.get('query','')
-    logging.info('Query: %s', query_str)
+    rand_idx = int(flask.request.args.get('rand_idx','0'))
+    logging.info('Query: %s, rand_idx: %d', query_str, rand_idx)
  
-    opt_text_vis_ranks = app.opt_search.search_text_vis(0, query_str)[:20]
-    opt_text_ranks = app.opt_search.search_text(0, query_str)[:20]
-    meta_ranks = app.meta_search.search_metadata(query_str)
-   
- 
-    return query_str
+    opt_text_vis_ranks = app.opt_search.search_text_vis(rand_idx, query_str)[:TOPK]
+    opt_text_ranks = app.opt_search.search_text(rand_idx, query_str)[:TOPK]
+
+    print opt_text_vis_ranks
+
+    meta_ranks = app.meta_search.search_metadata(query_str)[:TOPK]
+    print meta_ranks  
+    response_dict = compose_response(rand_idx, opt_text_vis_ranks, opt_text_ranks, meta_ranks) 
+
+    return flask.jsonify(success = True, response = response_dict) 
+
+def get_videoseg_name(video_name, fid):
+
+    n_frames = get_video_frame_num(video_name)
+
+    chunk = fid / SERVER_STORAGE_FRAMES
+    start_fid = chunk * SERVER_STORAGE_FRAMES
+    end_fid = start_fid + SERVER_STORAGE_FRAMES
+
+    videoseg_name = video_name + '_' + str(start_fid) + '_' + str(end_fid)  + '.mp4'
+
+    return videoseg_name, start_fid, end_fid
+
+
+
+def compose_response(rand_idx, opt_text_vis_ranks, opt_text_ranks, meta_ranks):
+
+    response_dict = {}
+
+    
+    response_dict['opt_text_vis'] = {}
+    for idx, tup in enumerate(opt_text_vis_ranks):
+
+        stream_name = tup[0]
+        p = [pos for pos, char in enumerate(stream_name) if char == '_']
+        video_name = stream_name[:p[-2]]
+        start_frame_fid = int(stream_name[p[-2]+1:p[-1]])
+        end_frame_fid = int(stream_name[p[-1]+1:-4])
+        start_time = start_frame_fid/int(stream_rates[video_name])
+        end_time =  end_frame_fid/int(stream_rates[video_name])
+        
+        response_dict['opt_text_vis'][idx] = {'video_name': video_name, 'start_time': start_time, 'end_time': end_time, 'score': tup[1]}
+
+    response_dict['opt_text'] = {}
+    for idx, tup in enumerate(opt_text_ranks):
+        stream_name = tup[0]
+        p = [pos for pos, char in enumerate(stream_name) if char == '_']
+        video_name = stream_name[:p[-2]]
+        start_frame_fid = int(stream_name[p[-2]+1:p[-1]])
+        end_frame_fid = int(stream_name[p[-1]+1:-4])
+        start_time = start_frame_fid/int(stream_rates[video_name])
+        end_time =  end_frame_fid/int(stream_rates[video_name])
+
+        response_dict['opt_text'][idx] = {'video_name': video_name, 'start_time': start_time, 'end_time': end_time, 'score': tup[1]}
+
+    response_dict['metadata'] = {}
+    for idx, tup in enumerate(meta_ranks):
+        video_name = tup[0]
+        start_frame_fid = start_fid_set[rand_idx][video_name] 
+        stream_name, start_fid, end_fid = get_videoseg_name(video_name, start_frame_fid)
+        start_time = start_fid/int(stream_rates[video_name])
+        end_time =  end_fid/int(stream_rates[video_name])
+
+        response_dict['metadata'][idx] = {'video_name': video_name, 'start_time': start_time, 'end_time': end_time, 'score': tup[1]}
+
+    return response_dict
+
 
 @app.route('/')
 def index():
@@ -77,7 +143,7 @@ def visual_match(query_str, vis_feature):
 
 class OptimalSearch():  
 
-    def __init__(self, ALL_TEXT_FOLDER = '/home/t-yuche/ranking/gen_rank_data/index'):
+    def __init__(self, ALL_TEXT_FOLDER = '/home/t-yuche/ranking/gen_rank_data/optimal-index'):
 
         self.indexes = []
         for i in xrange(1):
@@ -93,15 +159,17 @@ class OptimalSearch():
         for word in query_segs:
             query_dict[word] = 1/float(len(query_segs))
              
-        for stream_name in VIDEOS:
+        for stream_name in cur_idx.keys():
             stream_txt = cur_idx[stream_name]['text'] 
             stream_vis = cur_idx[stream_name]['vis']
+            start_fid = cur_idx[stream_name]['start_fid']
+            end_fid = cur_idx[stream_name]['end_fid']
+            video_name = cur_idx[stream_name]['video_name']
             text_score = getCosSimilarty(stream_txt, query_dict)    
             vis_score = visual_match(query_str, stream_vis)
             scores[stream_name] = 0.5 * text_score + 0.5 * vis_score
 
         sorted_scores = sorted(scores.items(), key=operator.itemgetter(1), reverse=True)
-        print sorted_scores[:20]
         return sorted_scores
     
     def search_text(self, rand_idx, query_str):
@@ -113,7 +181,7 @@ class OptimalSearch():
         for word in query_segs:
             query_dict[word] = 1/float(len(query_segs))
              
-        for stream_name in VIDEOS:
+        for stream_name in cur_idx.keys():
             stream_txt = cur_idx[stream_name]['text'] 
             stream_vis = cur_idx[stream_name]['vis']
             text_score = getCosSimilarty(stream_txt, query_dict)    
@@ -126,7 +194,7 @@ class OptimalSearch():
 
 #TODO
 #class SpecializeSearch():
-
+'''
 class SubsampleSearch():
 
     def __init__(self, ):
@@ -135,7 +203,7 @@ class SubsampleSearch():
 
 
     def search_text(self, rand_idx, query_str):
-
+'''
 
 class MetadataSearch():
 
@@ -162,7 +230,7 @@ class MetadataSearch():
     def get_score(self, value, edges):
         
         for i in xrange(len(edges) - 1):
-            if value >= edges[i] and value < edges[i + 1]: 
+            if value >= edges[i] and value <= edges[i + 1]: 
                 return (i+1)/((len(edges) - 1) * 1.0)
 
     def get_type_score(self, value, value_type):
@@ -175,8 +243,10 @@ class MetadataSearch():
             return self.get_score(value, viewcounts)
         elif value_type == 'rating': 
             return self.get_score(value, ratings)
-        elif value_type == 'dislikes': 
-            return self.get_score(value, dislikes)
+        elif value_type == 'dislikes':
+            for i in xrange(len(dislikes) - 1):
+                if value <= dislikes[i] and value >= dislikes[i+1]:
+                    return (i+1)/((len(dislikes) -1) * 1.0)
         elif value_type == 'likes': 
             return self.get_score(value, likes)
 
@@ -196,7 +266,7 @@ class MetadataSearch():
                     break
 
         #
-        metadata_features['rating'] = get_type_score(stream_info['rating'], 'rating')
+        metadata_features['rating'] = self.get_type_score(stream_info['rating'], 'rating')
         
         #
         words = stream_info['description'].split()
@@ -207,11 +277,11 @@ class MetadataSearch():
                     metadata_features['description'] = 1
                     break
         #
-        metadata_features['viewcount'] = get_type_score(stream_info['viewcount'], 'viewcount')
+        metadata_features['viewcount'] = self.get_type_score(stream_info['viewcount'], 'viewcount')
         #
-        metadata_features['dislikes'] = get_type_score(stream_info['dislikes'], 'dislikes')
+        metadata_features['dislikes'] = self.get_type_score(stream_info['dislikes'], 'dislikes')
         #
-        metadata_features['likes'] = get_type_score(stream_info['likes'], 'likes')
+        metadata_features['likes'] = self.get_type_score(stream_info['likes'], 'likes')
 
         #
         for w in stream_info['keywords']:
@@ -224,7 +294,7 @@ class MetadataSearch():
         # compute score
         score = 0
         if metadata_features['title'] or metadata_features['description'] or metadata_features['keywords']: 
-            for key in metadata_features:
+            for key in metadata_features.keys():
                 score += metadata_features[key] 
 
         return score
@@ -261,7 +331,7 @@ def start_from_terminal(app):
 
     # load index
     app.meta_search = MetadataSearch()
-    #app.opt_search = OptimalSearch()
+    app.opt_search = OptimalSearch()
 
     if opts.debug:
         app.run(debug=True, host='0.0.0.0', port=opts.port)
@@ -269,6 +339,21 @@ def start_from_terminal(app):
         start_tornado(app, opts.port)
 
 
+def init():
+    
+    global stream_rates
+    global start_fid_set
+    stream_rates = {}
+
+    for video_name in VIDEOS:
+        fps, dummy, dummy = get_video_fps(video_name)
+        stream_rates[video_name] = fps
+
+    with open('start_fid_set.pickle') as fh:
+        start_fid_set = pickle.load(fh)
+
+
 if __name__ == '__main__':
+    init()
     logging.getLogger().setLevel(logging.INFO)
     start_from_terminal(app)

@@ -3,6 +3,7 @@ from utils import *
 import pickle
 import numpy as np
 SERVER_STORAGE_FRAMES = 5 * 30
+SLIDING_SIZE = 1 * 30
 
 def get_inrange_fids(start_fid, end_fid, subsampled_fids):
 
@@ -29,7 +30,7 @@ def get_inrange_fids(start_fid, end_fid, subsampled_fids):
 def get_video_seg(rand_fid, video_name):
 
     start_fid = (rand_fid/SLIDING_SIZE) * SLIDING_SIZE
-    end_fid = min(start_fid + SERVER_WINDOW_SIZE , video_framenum[video_name])
+    end_fid = min(start_fid + SERVER_STORAGE_FRAMES , video_framenum[video_name])
 
     return start_fid, end_fid
 
@@ -212,40 +213,29 @@ if __name__ == "__main__":
             print idx, video_name 
  
             n_frames = video_framenum[video_name] 
-            rcnn_dict, vgg_dict, dummy, msr_cap_dict, dummy = load_all_modules_dict_local(video_name)
-
-            with open(os.path.join(OPTIMAL_INPUT_FOLDER, video_name + '_0.5.pickle')) as fh:
-                optimal_data = pickle.load(fh)
-
-            # metadata
+            
             fps, w, h = get_video_fps(video_name) 
-            # populate text and visual features
-            video_seg_name, start_fid, end_fid = get_videoseg_name(video_name, ss[video_name])
-            end_fid = min(start_fid + SERVER_STORAGE_FRAMES, n_frames)
+            start_fid, end_fid = get_video_seg(ss[video_name], video_name)
             key = str(start_fid) + '-' + str(end_fid)
 
-            greedypath = os.path.join(GREEDYFOLDER, video_name + '_0.5_gtframe.pickle')
-            gt_data = pickle.load(open(greedypath))
-            gt_picked_fid = gt_data['picked_f']
-            total_frame_n = gt_data['total_frame']
 
             # text features from greedy 
-            inrange_fids = get_inrange_fids(start_fid, end_fid, gt_picked_fid)
-            inrange_frames = [os.path.join('/mnt/frames', video_name, str(x) + '.jpg') for x in inrange_fids]   
+            #inrange_fids = get_inrange_fids(start_fid, end_fid, gt_picked_fid)
+            #inrange_frames = [os.path.join('/mnt/frames', video_name, str(x) + '.jpg') for x in inrange_fids]   
     
-            tf_list = combine_all_modeldicts(vgg_dict, msr_cap_dict, rcnn_dict, dummy, inrange_frames, 1)
-            tf = get_combined_tfs(tf_list)
+            #tf_list = combine_all_modeldicts(vgg_dict, msr_cap_dict, rcnn_dict, dummy, inrange_frames, 1)
+            #tf = get_combined_tfs(tf_list)
 
             # visual hints
             rcnn_bbx_list, rcnn_bbx_dict = load_video_rcnn_bbx('/home/t-yuche/ranking/gen_rank_data/rcnn-bbx-all', video_name)
  
             # TODO
             ''' all + visual hint'''
-            optimal_tf = optimal_data[key]
+            #optimal_tf = optimal_data[key]
             video_chunk = rcnn_bbx_list[start_fid: end_fid] 
             vis_hint = process_visual_hint(video_chunk, w, h)
             #optimal_tf
-            index[video_name] = {'text':optimal_tf, 'vis': vis_hint}
+            index[video_name] = {'start_fid': start_fid,'end_fid': end_fid , 'vis': vis_hint}
             ''' metadata '''
         with open(outpath, 'wb') as fh:
             pickle.dump(index, fh)
