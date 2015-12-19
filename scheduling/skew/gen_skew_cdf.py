@@ -8,6 +8,16 @@ try:
     plt.style.use('ggplot')
 except:
     pass
+font = {
+        'size'   : 24,
+    }
+text = {'color': 'black'}
+line = {'linewidth': 3}
+matplotlib.rc('font', **font)
+matplotlib.rc('text', **text)
+matplotlib.rc('lines', **line)
+
+
 
 KS = [3,5,7,9]
 def load_all_words():
@@ -110,8 +120,8 @@ if __name__ == "__main__":
 
     plt.figure()   
     plt.xlabel('Top-k word') 
-    plt.ylabel('Percentage (%)') 
+    plt.ylabel('Occurrence Percentage (%)') 
     xs = range(1, 66)    
-    plt.errorbar(xs, [x_value[x][0] * 100 for x in xs], yerr=[x_value[x][1] * 100 for x in xs])
+    plt.errorbar(xs, [x_value[x][0] * 100 for x in xs], yerr=[x_value[x][1] * 100 for x in xs], capsize = 3)
     plt.ylim([0, 100])
     plt.savefig('skew_cdf.pdf', bbox_inches = 'tight')
