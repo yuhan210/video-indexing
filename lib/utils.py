@@ -13,8 +13,145 @@ import cv2
 
 BAD_WORDS = ['none', 'blurry', 'dark']
 
+def remove_start_end_fid(video_s_e):
+    if video_s_e.find('.mp4') >= 0:
+        video_s_e = video_s_e[:-4]
+
+    pos = [i for i, w in enumerate(video_s_e) if w == '_']
+    return video_s_e[:pos[-2]], video_s_e[pos[-2]+1 : pos[-1]], video_s_e[pos[-1]+1:]
+
+def combine_all_modeldicts(_vgg_data, _msr_data, _rcnn_data, _fei_data, frame_paths, stop_word_choice = 0):
+
+    stop_words = get_stopwords(stop_word_choice)
+    wptospd = word_pref_to_stopword_pref_dict()
+    convert_dict = convert_to_equal_word()
+
+    tf_list = {}
+    for frame_path in frame_paths:
+
+        frame_name = frame_path.split('/')[-1]
+        rcnn_data = _rcnn_data[frame_path]
+        vgg_data = _vgg_data[frame_path]
+        msr_data = _msr_data[frame_path]
+        #fei_data = _fei_data[frame_path]
+   
+        # combine words
+        
+        rcnn_ws = []
+        if len(rcnn_data) > 0:
+            for rcnn_idx, word in enumerate(rcnn_data['pred']['text']):
+                ## the confidence is higher than 10^(-3) and is not background
+                if rcnn_data['pred']['conf'][rcnn_idx] > 0.0005 and word not in stop_words:
+                    rcnn_ws += [word]
+
+        vgg_ws = []
+        if len(vgg_data) > 0:
+            for vgg_idx, w in enumerate(vgg_data['pred']['text']):
+                w = wptospd[w]
+                if w in convert_dict:
+                    w = convert_dict[w]
+                prob = (-1)*vgg_data['pred']['conf'][vgg_idx]
+                if w not in stop_words and prob > 0.01:
+                    vgg_ws += [w]
+
+        
+        fei_ws = []
+        ''' 
+        if len(fei_data) > 0:
+            str_list = fei_data['candidate']['text']
+            for s in str_list:
+                for w in s.split(' '):
+                    w = inflection.singularize(w)
+                    if w not in stop_words and w not in fei_ws:
+                        fei_ws += [w]         
+        '''
+        msr_ws = [] 
+        if len(msr_data) > 0:
+            for msr_idx, w in enumerate(msr_data['words']['text']):
+                w = inflection.singularize(w)
+
+                prob = msr_data['words']['prob'][msr_idx]
+                if w in convert_dict:
+                    w = convert_dict[w]
+                if w not in stop_words and len(w) != 0 and prob > -5 and msr_idx < 30:
+                    msr_ws += [w]
+
+        words = {}
+        for w in rcnn_ws:
+            if w not in words:
+                words[w] = 1
+            else:
+                words[w] += 1
+        for w in vgg_ws:
+            if w not in words:
+                words[w] = 1
+            else:
+                words[w] += 1
+        
+        for w in fei_ws:
+            if w not in words:
+                words[w] = 1
+            else:
+                words[w] += 1
+    
+        for w_idx, w in enumerate(msr_ws):
+            if w not in words:
+                words[w] = 1
+            else:
+                words[w] += 1
+
+        if '' in words:
+            words.pop('', None)
+
+        tf_list[frame_name] = words
+    
+    return tf_list
+
+
+
+def get_combined_tfs(tfs_dict):
+
+    combined_tfs = {}
+    # normalize
+    deno = len(tfs_dict)
+    for frame_name in tfs_dict:
+        tf = tfs_dict[frame_name]
+        for w in tf:
+            if w not in combined_tfs:
+                combined_tfs[w] = 1
+            else:
+                combined_tfs[w] += 1
+
+    for w in combined_tfs:
+        combined_tfs[w] /= (deno * 1.0)
+ 
+    return combined_tfs
+
+
+'''
+# of subsampled words/# of all words
+'''
+def detailed_measure(all_tf, subsampled_tf):
+    match_count = 0
+    for w in all_tf:
+        if w in subsampled_tf:
+            match_count += 1
+ 
+    if len(all_tf) == 0:
+        return -1
+
+    return match_count/(len(all_tf) * 1.0)
+    
+
 
 def get_video_fps(video_name):
+    if video_name.find('.mp4') >= 0:
+        video_name = video_name[:-4]
+    with open('/home/t-yuche/lib/data/video_metadata.pickle') as fh:
+        info = pickle.load(fh)
+    
+    return info[video_name]
+    '''
     video_path = os.path.join('/mnt/videos', video_name)
     if video_path.find('.mp4') < 0:
         video_path += '.mp4'
@@ -22,9 +159,8 @@ def get_video_fps(video_name):
     fps  = cap.get(cv2.cv.CV_CAP_PROP_FPS) 
     w  = int(cap.get(cv2.cv.CV_CAP_PROP_FRAME_WIDTH))
     h  = int(cap.get(cv2.cv.CV_CAP_PROP_FRAME_HEIGHT))
- 
     return fps, w, h
-
+    '''
 def get_video_frame_num(video_name):
     return len(os.listdir(os.path.join('/mnt/frames', video_name)))
 
@@ -154,18 +290,6 @@ def cos_similarty(a_dict, b_dict):
         return sumab/(math.sqrt(sumaa) * math.sqrt(sumbb))
  
 
-
-def get_combined_tfs(tfs_dict):
-
-    combined_tfs = {}
-    for d in tfs_dict:
-        for w in d['tf']:
-            if w not in combined_tfs:
-                combined_tfs[w] = 1
-            else:
-                combined_tfs[w] += 1
-
-    return combined_tfs
 
 def combine_all_models_tmp(video_name, _vgg_data, _msr_data, _rcnn_data, _fei_data):
 
@@ -367,6 +491,9 @@ def loadKeyFrames(video_name):
     return keyframe_filenames
 
 
+
+
+
 #TODO: also load rcnn bbx
 def load_all_modules(video_name):
    
@@ -381,6 +508,16 @@ def load_all_modules(video_name):
 
     return rcnn_data, vgg_data, fei_caption_data, msr_cap_data, None
 
+#TODO: also load rcnn bbx
+def load_all_modules_dict_local(video_name):
+   
+    rcnn_data, rcnn_dict = load_video_rcnn('/home/t-yuche/ranking/gen_rank_data/rcnn-info-all', video_name)
+    vgg_data, vgg_dict = load_video_recog('/home/t-yuche/ranking/gen_rank_data/vgg-classify-all', video_name)
+    #fei_caption_data, fei_caption_dict = load_video_caption('/mnt/tags/fei-caption-all', video_name)
+    msr_cap_data, msr_cap_dict = load_video_msr_caption('/home/t-yuche/ranking/gen_rank_data/msr-caption-all', video_name)
+    #rcnn_bbx = load_video_rcnn_bbx('/mnt/tags/rcnn-bbx-tmp', video_name) 
+
+    return rcnn_dict, vgg_dict, None, msr_cap_dict, None
 
 #TODO: also load rcnn bbx
 def load_all_modules_dict(video_name):
@@ -390,11 +527,11 @@ def load_all_modules_dict(video_name):
 
     rcnn_data, rcnn_dict = load_video_rcnn('/mnt/tags/rcnn-info-all', video_name)
     vgg_data, vgg_dict = load_video_recog('/mnt/tags/vgg-classify-all', video_name)
-    fei_caption_data, fei_caption_dict = load_video_caption('/mnt/tags/fei-caption-all', video_name)
+    #fei_caption_data, fei_caption_dict = load_video_caption('/mnt/tags/fei-caption-all', video_name)
     msr_cap_data, msr_cap_dict = load_video_msr_caption('/mnt/tags/msr-caption-all', video_name)
     #rcnn_bbx = load_video_rcnn_bbx('/mnt/tags/rcnn-bbx-tmp', video_name) 
 
-    return rcnn_dict, vgg_dict, fei_caption_dict, msr_cap_dict, None
+    return rcnn_dict, vgg_dict, None, msr_cap_dict, None
 
 def load_all_labels(video_name):
     deprecation("Using local_all_moduels(video_name) instead")

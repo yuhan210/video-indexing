@@ -6,6 +6,7 @@ import numpy as np
 import pickle
 from PIL import Image
 import imagehash
+from multiprocessing import Process, Queue
 
 def get_video_fps(video_name):
 
@@ -34,6 +35,19 @@ def colorHistSim(a, b):
 
     return sim
 
+def colorHistSimq(a, b, que):
+    a = cv2.cvtColor(a, cv2.COLOR_BGR2HSV)
+    b = cv2.cvtColor(b, cv2.COLOR_BGR2HSV)
+
+    ahist = cv2.calcHist([a], [0, 1], None, [180, 256], [0, 180, 0, 256])
+    bhist = cv2.calcHist([b], [0, 1], None, [180, 256], [0, 180, 0, 256])
+    
+    cv2.normalize(ahist,ahist,0,255,cv2.NORM_MINMAX)
+    cv2.normalize(bhist,bhist,0,255,cv2.NORM_MINMAX)
+
+    sim = cv2.compareHist(ahist, bhist, cv2.cv.CV_COMP_CORREL)
+    que.put(sim)
+
 def filter_matches(matches):
     good = []
     for m in matches:
@@ -58,6 +72,21 @@ def getSIFTMatchingSim(a, b):
 
     return len(good_matches)/(len(kp1) * 1.0)
 
+def getSIFTMatchingSimq(a, b, que):
+    a = cv2.cvtColor(a, cv2.COLOR_BGR2GRAY)    
+    b = cv2.cvtColor(b, cv2.COLOR_BGR2GRAY)    
+
+    sift = cv2.SIFT()
+    kp1, des1 = sift.detectAndCompute(a, None)
+    kp2, des2 = sift.detectAndCompute(b, None)
+    if len(kp1) == 0 or len(kp2) == 0:
+        que.put(0)
+        
+    else:
+        bf = cv2.BFMatcher()
+        matches = bf.knnMatch(des1, des2, k = 2)
+        good_matches = filter_matches(matches)
+        que.put(len(good_matches)/(len(kp1) * 1.0))
 
 def getSURFMatchingSim(a, b):
     a = cv2.cvtColor(a, cv2.COLOR_BGR2GRAY)    
@@ -74,6 +103,21 @@ def getSURFMatchingSim(a, b):
     good_matches = filter_matches(matches)
     
     return len(good_matches)/(len(kp1) * 1.0)
+
+def getSURFMatchingSimq(a, b, que):
+    a = cv2.cvtColor(a, cv2.COLOR_BGR2GRAY)    
+    b = cv2.cvtColor(b, cv2.COLOR_BGR2GRAY)    
+
+    surf = cv2.SURF()
+    kp1, des1 = surf.detectAndCompute(a, None)
+    kp2, des2 = surf.detectAndCompute(b, None)
+    if len(kp1) == 0 or len(kp2) == 0:
+        que.put(0)
+    else: 
+        bf = cv2.BFMatcher()
+        matches = bf.knnMatch(des1, des2, k = 2)
+        good_matches = filter_matches(matches)
+        que.put(len(good_matches)/(len(kp1) * 1.0))
 
 def parseMVs_normalized(video_name, folder = '/mnt/tags/video-encoding-info'):
 
@@ -276,7 +320,24 @@ def getFrameDiff(prev_frame, cur_frame):
 
     return movement
 
+def getFrameDiffq(prev_frame, cur_frame, que):
+
+    prev_frame = cv2.cvtColor(prev_frame, cv2.COLOR_BGR2GRAY)
+    cur_frame = cv2.cvtColor(cur_frame, cv2.COLOR_BGR2GRAY)
     
+    frameDelta = cv2.absdiff(prev_frame, cur_frame)
+    thresh = cv2.threshold(frameDelta, 35, 255, cv2.THRESH_BINARY)[1]
+
+    thresh = cv2.dilate(thresh, None, iterations=2)
+    movement = cv2.countNonZero(thresh)
+
+    que.put(movement)
+    
+def phashq(a, b, que):
+    a_hash = imagehash.phash(a)
+    b_hash = imagehash.phash(b)
+
+    que.put(a_hash - b_hash)
 
 def phash(a, b):
     a_hash = imagehash.phash(a)
