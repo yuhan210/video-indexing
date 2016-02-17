@@ -1,94 +1,133 @@
-from bs4 import BeautifulSoup 
-from common import createVideoMeatadata, getNewVideoName, downloadVideo
+import youtube_dl
 import socket
 import urllib2
+import traceback
 import urllib
-import pafy
-import sys
-reload(sys)
-sys.setdefaultencoding("utf8")
-import json
+import requests
+from lxml import html
 import re
+import sys
+
+import time
+import os
+DEST_FOLDER = '/home/ubuntu/panorama/download-periscope/videos'
+class MyLogger(object):
+    def debug(self, msg):
+        print (msg)
+        pass
 
 
-def parseWebpage(query_url):
+    def warning(self, msg):
+        pass
+
+    def error(self, msg):
+        print(msg)
+
+
+def my_hook(d):
+    if d['status'] == 'finished':
+        print('Done downloading, now converting ...')
+
+ydl_opts = {
+        'format': 'bestvideo/best',
+        'sanitize_filename': True,
+        'writeinfojson': True,
+        'verbose': True
+        #'logger': MyLogger()
+        #'progress_hooks': [my_hook],
+        }
+
+def replace_extension(filename, ext, expected_real_ext=None):
+    name, real_ext = os.path.splitext(filename)
+    return '{0}.{1}'.format(
+            name if not expected_real_ext or real_ext[1:] == expected_real_ext else filename,
+            ext)
+
+def get_metadata(url, filename):
 
     watch_urls = []
     try:
-        html_doc = urllib2.urlopen(query_url).readlines()
+        html_doc = urllib2.urlopen(url).readlines()
 
     except urllib2.URLError, e:
         # For Python 2.7
         print 'URLError %r' % e
-        exit(-1)
+        return
 
     except socket.timeout, e:
         # For Python 2.7
         print 'Timeout %r' % e
-        exit(-1)
+        return
 
-    for line in html_doc:
-        if line.find('><div class="yt-lockup-content"><h3 class="yt-lockup-title"><a href="/watch?') >= 0:
-            print line
-            watch_url = line.split('a href')[1].split('class=')[0].split('"')[1].split('v=')[1]
-            watch_urls += [watch_url]
-        
-     
-    return watch_urls
- 
+    with open(filename, 'w') as fh:
+        for line in html_doc:
+            fh.write(line)
 
 
-def getWatchUrls(query, max_number=10, max_length = 300):
 
-    # https://www.youtube.com/results?filters=creativecommons&search_query=dog+playing&page=1
-    #query_prefix = 'https://www.youtube.com/results?search_query=' + urllib.quote_plus(query) + '&filters=creativecommons&page='
-    query_prefix = 'https://www.youtube.com/results?search_query=' + urllib.quote_plus(query) + '&page='
+def download_video(urls):
+    with youtube_dl.YoutubeDL(ydl_opts) as ydl:
+        for url in urls:
+            try:
+                #ret, ress = ydl.download([url])
+                # !!need to modify youtube-dl source code
+                ret, ress = ydl.download([url])
+                #print ress[0]['title'], getNewVideoName(ress[0]['title']) 
+                prefix = ress[0]['title'] + '-' + ress[0]['id']
+                metadata_fname = ress[0]['title'] + '-' + ress[0]['id'] + '.metadata'
+                get_metadata(url, metadata_fname)
+                new_prefix = getNewVideoName(prefix)
+                files = [prefix + '.mp4', prefix  + '.info.json', prefix + '.metadata']
+                new_files = [new_prefix + '.mp4', new_prefix  + '.info.json', new_prefix + '.metadata']
+                for fid, f in enumerate(files):
+                    if os.path.exists(f):
+                        os.rename(f, os.path.join(DEST_FOLDER, new_files[fid])) 
+            except:
+                print 'error:', traceback.format_exc()
+                continue
+
+def parse_video_archive(url):
     watch_urls = []
-    print query_prefix
-    page_number = 1
-    while len(watch_urls) < max_number:
-        
-        query_url = query_prefix + str(page_number)
-        page_urls = parseWebpage(query_url)
-        for watch_url in page_urls:
-            video = pafy.new(watch_url) 
-            if video.length < max_length:# secs            
-                watch_urls += [watch_url]
-        print page_number, page_urls, len(watch_urls)
-        page_number += 1
-    
-    return watch_urls[:max_number]
-    
+    try:
+        html_doc = urllib2.urlopen(url).readlines()
+
+    except urllib2.URLError, e:
+        # For Python 2.7
+        print 'URLError %r' % e
+        return
+
+    except socket.timeout, e:
+        # For Python 2.7
+        print 'Timeout %r' % e
+        return
+
+    urls = []
+    for idx, line in enumerate(html_doc):
+        line = line.strip()
+        if line.find('<span class="label label-danger">Off air!</span>') >= 0:
+            # get url
+            url_string = html_doc[idx + 3]
+            url = url_string[url_string.index('https://'): url_string.index("',")]
+            urls += [url]
+    return urls
+
+## get new video name without extension
+def getNewVideoName(videoname):
+
+    nstr = re.sub(r'[?|$|.|!]',r'', videoname)
+    nestr = nestr = re.sub(r'[^a-zA-Z0-9 ]',r'',nstr)
+    new_videoname = '_'.join([str(x).lower() for x in nestr.split(' ')]) 
+
+    return new_videoname
+
+def start_download():
+    urls = parse_video_archive('http://onperiscope.com/')
+    download_video(urls) 
 
 if __name__ == "__main__":
 
-    if len(sys.argv) != 2:
-        print 'Usage:', sys.argv[0], ' test_mode'
-        exit(-1)
-
-    test_mode = int(sys.argv[1])
-     
-    input_str = (raw_input('$ '))
-   
-    if test_mode == 0:
-        with open('queries', 'a') as fh:
-            fh.write(input_str + '\n')
-    
-    watch_urls = getWatchUrls(input_str, 30)
-    
-    for watch_url in watch_urls:
-        video = pafy.new(watch_url) 
-        video_info = downloadVideo(video)
-        
-        if test_mode == 0:
-            # write download log      
-            with open('log', 'a') as fh:
-                output_str = input_str
-                for key in video_info:
-                    if key == 'description' or key == 'author' or key == 'keywords':
-                        continue
-                    if type(video_info[key]) == list:
-                        output_str += '\t' + ','.join(video_info[key])
-                    else:
-                        output_str += '\t' + str(video_info[key])
-                fh.write(output_str + '\n')
+    while True:
+        if len(os.listdir(DEST_FOLDER)) >= 1000000 * 3 + 1000:
+            break
+        start_download()
+        time.sleep(2 * 60)
