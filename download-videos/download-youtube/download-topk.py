@@ -91,29 +91,25 @@ def downloadVideo(video, video_folder="/home/t-yuche/deep-video/data/videos", vi
 
 if __name__ == "__main__":
 
-    if len(sys.argv) != 3:
-        print 'Usage:', sys.argv[0], ' video_dest_folder metadata_dest_folder'
+    if len(sys.argv) != 5:
+        print 'Usage:', sys.argv[0], ' video_dest_folder metadata_dest_folder k query_str'
         exit(-1)
     video_folder = sys.argv[1]
     metadata_folder = sys.argv[2]
 
-    #url = (raw_input('$ url:'))
-    input_str = 'cat' 
+    input_str = sys.argv[4]
     query = '+'.join(input_str.split(' '))
     #https://www.youtube.com/results?search_query=basketball        
-    K = 100
+    K = int(sys.argv[3])
     page = 1
     urls = []
     while len(urls) < K: 
         page_urls = getWatchUrls(query, page)
         page += 1
         urls += page_urls
-        print urls
     
     for uid, url in enumerate(urls):
  
         video = pafy.new(url)   
         downloadVideo(video, video_folder, metadata_folder) 
             
-        if uid ==0:
-            break
